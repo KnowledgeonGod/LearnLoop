@@ -1,0 +1,21 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets and local config
+.env
+
+# Local database
+db.sqlite3
+
+# Editor
+.vscode/
+
+# Django
+staticfiles/
+media/
