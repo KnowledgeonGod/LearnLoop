@@ -1,0 +1,9 @@
+{% extends "accounts/base.html" %}
+{% block content %}
+<h1>{{ topic.name }}</h1>
+<ul>
+  <li><a href="{% url 'quiz' topic.pk %}">Personalize this topic (quick quiz)</a></li>
+  <li><a href="{% url 'plan' topic.pk %}">My learning plan</a></li>
+</ul>
+<p><a href="{% url 'dashboard' %}">Back to dashboard</a></p>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "accounts/base.html" %}
+{% block content %}
+<h1>Personalize: {{ topic.name }}</h1>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save my answers</button>
+</form>
+<p><a href="{% url 'topic_detail' topic.pk %}">Back</a></p>
+{% endblock %}

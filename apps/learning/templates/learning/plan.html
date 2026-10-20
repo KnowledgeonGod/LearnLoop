@@ -1,0 +1,46 @@
+{% extends "accounts/base.html" %}
+{% block content %}
+<h1>{{ topic.name }}: your learning plan</h1>
+
+{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+
+{% if page.state == "needs_quiz" %}
+  <p>Answer a quick quiz first, so the plan fits you.</p>
+  <p><a href="{% url 'quiz' topic.pk %}">Take the quiz</a></p>
+{% else %}
+  {% if page.state == "stale" %}
+    <p>Your answers changed since this plan was made. Rebuild it to match them.</p>
+  {% endif %}
+  {% if rows %}
+    <ol>
+      {% for step, found in rows %}
+      <li>
+        <strong>{{ step.title }}</strong>
+        ({{ step.get_step_type_display }}, about {{ step.minutes }} min)<br>
+        {{ step.explanation }}
+        {% if found %}
+        <ul>
+          {% for resource in found %}
+          <li>{{ resource.get_kind_display }}:
+            <a href="{{ resource.url }}" target="_blank" rel="noopener noreferrer">{{ resource.title }}</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% if missing_resources %}
+      <p>Some resources could not be loaded. Rebuild your plan to try again.</p>
+    {% endif %}
+  {% endif %}
+  <form method="post" action="{% url 'plan_generate' topic.pk %}">
+    {% csrf_token %}
+    <button type="submit">
+      {% if page.plan %}Rebuild my plan{% else %}Create my plan{% endif %}
+    </button>
+  </form>
+{% endif %}
+
+<p><a href="{% url 'topic_detail' topic.pk %}">Back to topic</a></p>
+{% endblock %}
