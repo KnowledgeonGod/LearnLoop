@@ -8,7 +8,7 @@ PASSWORD = "S0me-str0ng-pass!"
 
 ANSWERS = {
     "level": "beginner", "goal": "job", "hours_per_week": 6,
-    "weeks_available": 8, "preferred_format": "video", "depth": "deep",
+    "weeks_available": 8, "preferred_format": "mix", "depth": "deep",
 }
 
 

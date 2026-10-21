@@ -101,7 +101,12 @@ class FakeLLMClient:
         per_step = max(15, min(240, total_minutes // len(steps)))
         per_step -= per_step % 5
 
-        return [StepDraft(t, e, per_step, kind) for t, e, kind in steps]
+        def final_type(natural_type):
+            # A chosen format is respected strictly. Only "mix" varies by step.
+        
+            return natural_type if request.preferred_format == "mix" else lead
+
+        return [StepDraft(t, e, per_step, final_type(kind)) for t, e, kind in steps]
 
 
 CLIENTS = {"fake": FakeLLMClient}

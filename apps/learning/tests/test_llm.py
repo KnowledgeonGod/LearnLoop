@@ -66,6 +66,20 @@ class FakeClientTests(SimpleTestCase):  # unit tests
         steps = self.llm.generate_plan(make_request(topic="Rust"))
         self.assertTrue(any("Rust" in s.title for s in steps))
 
+    def test_a_chosen_format_applies_to_every_step(self):
+        for fmt, expected in (("video", "watch"), ("reading", "read"), ("practice", "practice")):
+            for goal in ("exam", "job", "build", "curiosity"):
+                for depth in ("overview", "deep"):
+                    with self.subTest(fmt=fmt, goal=goal, depth=depth):
+                        steps = self.llm.generate_plan(
+                            make_request(preferred_format=fmt, goal=goal, depth=depth)
+                        )
+                        self.assertEqual({s.step_type for s in steps}, {expected})
+
+    def test_mix_uses_several_step_types(self):
+        steps = self.llm.generate_plan(make_request(preferred_format="mix"))
+        self.assertGreater(len({s.step_type for s in steps}), 1)
+
 
 class GetClientTests(SimpleTestCase):
     def test_default_is_the_fake_client(self):

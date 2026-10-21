@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from apps.resources.models import StepResource
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -49,3 +50,21 @@ class PlanResourcesViewTests(TestCase):  # integration tests
         resp = self.client.get(reverse("plan", args=[evil.pk]))
         self.assertNotContains(resp, "<b>x</b>")
         self.assertContains(resp, "&lt;b&gt;x&lt;/b&gt;")
+        
+    def test_chosen_format_decides_the_kind_of_resources(self):
+        expected = {
+            "video": {"video"},
+            "reading": {"book", "article"},
+            "practice": {"exercise"},
+        }
+        for fmt, kinds in expected.items():
+            with self.subTest(fmt=fmt):
+                make_attempt(self.alice, self.topic, preferred_format=fmt)
+                self.client.post(self.generate_url)
+                found = set(
+                    StepResource.objects.filter(
+                        step__plan__user=self.alice, step__plan__topic=self.topic
+                    ).values_list("resource__kind", flat=True)
+                )
+                self.assertTrue(found)
+                self.assertTrue(found <= kinds, f"{fmt} plan contained {found}")
