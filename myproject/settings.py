@@ -103,6 +103,9 @@ YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "10"))
 
+# Keep tests offline even when .env selects the real backends.
+TEST_RUNNER = "myproject.test_runner.OfflineBackendsTestRunner"
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',

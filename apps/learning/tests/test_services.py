@@ -7,13 +7,23 @@ from django.utils import timezone
 from apps.learning.models import LearningPlan, PlanStep
 from apps.learning.services import (
     InvalidPlan,
+    PlanConfigurationFailed,
     PlanGenerationFailed,
     QuizRequired,
     generate_plan,
     validate_drafts,
 )
 
-from .helpers import FailingClient, FixedClient, draft, make_attempt, make_topic, make_user, valid_drafts
+from .helpers import (
+    ConfigFailingClient,
+    FailingClient,
+    FixedClient,
+    draft,
+    make_attempt,
+    make_topic,
+    make_user,
+    valid_drafts,
+)
 
 
 class ValidateDraftsTests(SimpleTestCase):  # unit tests
@@ -99,6 +109,12 @@ class GeneratePlanTests(TestCase):
         make_attempt(self.user, self.topic)
         with self.assertRaises(PlanGenerationFailed):
             generate_plan(user=self.user, topic=self.topic, client=FailingClient())
+        self.assertEqual(LearningPlan.objects.count(), 0)
+
+    def test_a_configuration_failure_is_distinguishable_from_a_normal_failure(self):
+        make_attempt(self.user, self.topic)
+        with self.assertRaisesMessage(PlanConfigurationFailed, "LLM_API_KEY"):
+            generate_plan(user=self.user, topic=self.topic, client=ConfigFailingClient())
         self.assertEqual(LearningPlan.objects.count(), 0)
 
     def test_llm_failure_keeps_the_existing_plan(self):

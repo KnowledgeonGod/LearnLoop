@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.quiz.selectors import get_attempt
-from services.llm import LLMError, PlanRequest, get_llm_client
+from services.llm import LLMConfigurationError, LLMError, PlanRequest, get_llm_client
 
 from .models import (
     MAX_EXPLANATION_LENGTH,
@@ -23,6 +23,10 @@ class QuizRequired(Exception):
 
 class PlanGenerationFailed(Exception):
     pass
+
+
+class PlanConfigurationFailed(PlanGenerationFailed):
+    """The selected backend is missing configuration. Its message is safe to show."""
 
 
 class InvalidPlan(PlanGenerationFailed):
@@ -85,6 +89,8 @@ def generate_plan(*, user, topic, client=None) -> LearningPlan:
     try:
         client = client or get_llm_client()
         drafts = client.generate_plan(request)
+    except LLMConfigurationError as exc:
+        raise PlanConfigurationFailed(str(exc)) from exc
     except LLMError as exc:
         raise PlanGenerationFailed(str(exc)) from exc
     steps = validate_drafts(drafts)

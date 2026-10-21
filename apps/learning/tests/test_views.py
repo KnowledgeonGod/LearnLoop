@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.learning.models import LearningPlan
-from apps.learning.services import PlanGenerationFailed
+from apps.learning.services import PlanConfigurationFailed, PlanGenerationFailed
 
 from .helpers import later, make_attempt, make_topic, make_user
 
@@ -71,6 +71,18 @@ class PlanViewTests(TestCase):  # integration tests
                 resp = self.client.post(self.generate_url)
         self.assertContains(resp, "try again", status_code=503)
         self.assertNotContains(resp, "secret internal detail", status_code=503)
+
+    def test_configuration_failure_shows_an_actionable_message(self):
+        make_attempt(self.alice, self.topic)
+        error = PlanConfigurationFailed(
+            "LLM_BACKEND is 'openai', but LLM_API_KEY is empty. Add LLM_API_KEY to .env. "
+            "Run 'python manage.py check_backends' to verify the setup."
+        )
+        with patch("apps.learning.views.generate_plan", side_effect=error):
+            with self.assertLogs("apps.learning.views", level="WARNING"):
+                resp = self.client.post(self.generate_url)
+        self.assertContains(resp, "LLM_API_KEY", status_code=503)
+        self.assertContains(resp, "check_backends", status_code=503)
 
     def test_users_cannot_see_each_others_plans(self):  # IDOR
         make_attempt(self.alice, self.topic)

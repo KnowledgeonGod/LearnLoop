@@ -4,7 +4,7 @@ To use a real model later, add a client class with the same two members
 import json
 import re
 from dataclasses import asdict, dataclass
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -13,6 +13,11 @@ from django.conf import settings
 
 class LLMError(Exception):
     pass
+
+
+class LLMConfigurationError(LLMError):
+    """The backend is selected but cannot run until .env is filled in.
+    Its message is safe to show to the user: it never contains a key."""
 
 
 @dataclass(frozen=True)
@@ -132,6 +137,42 @@ Rules:
 _JSON_BLOCK = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
+def _http_error(exc: HTTPError) -> LLMError:
+    """Turn common provider status codes into safe, actionable messages."""
+    status = exc.code
+    code = kind = ""
+    try:
+        data = json.loads(exc.read().decode("utf-8"))
+        error = data.get("error", {}) if isinstance(data, dict) else {}
+        if isinstance(error, dict):
+            code = str(error.get("code") or "")
+            kind = str(error.get("type") or "")
+    except (UnicodeDecodeError, json.JSONDecodeError, OSError, ValueError):
+        pass
+
+    if status in (401, 403):
+        return LLMConfigurationError(
+            "The provider rejected the API key (HTTP 401/403). "
+            "Check LLM_API_KEY in .env, or set LLM_BACKEND=fake."
+        )
+    if status == 404:
+        return LLMConfigurationError(
+            "The provider could not find the model or endpoint (HTTP 404). "
+            "Check LLM_MODEL and LLM_API_URL in .env."
+        )
+    if status == 429 and (
+        kind == "insufficient_quota"
+        or code in {"insufficient_quota", "credit_balance_exhausted"}
+    ):
+        return LLMConfigurationError(
+            "The provider account has no credits remaining (HTTP 429). "
+            "Add credits, or set LLM_BACKEND=fake."
+        )
+    if status == 429:
+        return LLMError("The provider is rate-limiting requests (HTTP 429). Try again in a moment.")
+    return LLMError(f"The language model request failed: HTTP {status}.")
+
+
 def _post_json(url, payload, *, headers=None) -> dict:
     """POST JSON and return the decoded response. Raises LLMError on any failure."""
     body = json.dumps(payload).encode("utf-8")
@@ -150,6 +191,8 @@ def _post_json(url, payload, *, headers=None) -> dict:
     try:
         with urlopen(request, timeout=getattr(settings, "LLM_TIMEOUT", 30)) as response:
             raw = response.read()
+    except HTTPError as exc:
+        raise _http_error(exc) from exc
     except (URLError, OSError, TimeoutError) as exc:
         raise LLMError(f"The language model request failed: {exc}") from exc
 
@@ -245,7 +288,11 @@ class OpenAIClient:
         # OpenAI itself requires a key. A local server (Ollama, vLLM) usually does not,
         # so only enforce the key for the hosted default.
         if not api_key and urlsplit(api_url).hostname == "api.openai.com":
-            raise LLMError("LLM_API_KEY is not set, so the openai backend cannot run.")
+            raise LLMConfigurationError(
+                "LLM_BACKEND is 'openai', but LLM_API_KEY is empty. "
+                "Add LLM_API_KEY to .env, or set LLM_BACKEND=fake. "
+                "Run 'python manage.py check_backends' to verify the setup."
+            )
 
         payload = {
             "model": getattr(settings, "LLM_MODEL", "gpt-4o-mini"),

@@ -1,11 +1,15 @@
+import io
+import json
 from itertools import product
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
 
 from django.test import SimpleTestCase, override_settings
 
 from apps.learning.services import validate_drafts
 from services.llm import (
     FakeLLMClient,
+    LLMConfigurationError,
     LLMError,
     OpenAIClient,
     PlanRequest,
@@ -190,8 +194,10 @@ class OpenAIClientTests(SimpleTestCase):  # unit tests, network always mocked
                     self.llm.generate_plan(make_request())
 
     @override_settings(LLM_API_KEY="")
-    def test_a_missing_key_is_a_clear_error(self):
-        with self.assertRaisesMessage(LLMError, "LLM_API_KEY"):
+    def test_a_missing_key_is_a_configuration_error(self):
+        with self.assertRaisesMessage(LLMConfigurationError, "LLM_API_KEY"):
+            self.llm.generate_plan(make_request())
+        with self.assertRaisesMessage(LLMConfigurationError, "check_backends"):
             self.llm.generate_plan(make_request())
 
     @override_settings(
@@ -267,3 +273,36 @@ class PostJsonTests(SimpleTestCase):
         with patch("services.llm.urlopen", return_value=self.response(b"[]")):
             with self.assertRaises(LLMError):
                 _post_json("https://example.com", {})
+
+    def test_provider_http_errors_are_actionable_and_do_not_include_the_key(self):
+        cases = [
+            (401, {}, LLMConfigurationError, "rejected the API key"),
+            (404, {}, LLMConfigurationError, "LLM_MODEL"),
+            (
+                429,
+                {"error": {"type": "insufficient_quota", "code": "credit_balance_exhausted"}},
+                LLMConfigurationError,
+                "no credits",
+            ),
+            (
+                429,
+                {"error": {"type": "rate_limit_exceeded"}},
+                LLMError,
+                "rate-limiting",
+            ),
+        ]
+        for status, payload, expected, message in cases:
+            with self.subTest(status=status, payload=payload):
+                error = HTTPError(
+                    "https://example.com",
+                    status,
+                    "error",
+                    {},
+                    io.BytesIO(json.dumps(payload).encode("utf-8")),
+                )
+                with patch("services.llm.urlopen", side_effect=error):
+                    with self.assertRaises(expected) as caught:
+                        _post_json("https://example.com", {})
+                self.assertIs(type(caught.exception), expected)
+                self.assertIn(message, str(caught.exception))
+                self.assertNotIn("sk-", str(caught.exception))

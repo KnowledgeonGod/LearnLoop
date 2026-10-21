@@ -5,7 +5,7 @@ from django.utils import timezone
 from apps.accounts.services import register_user
 from apps.quiz.services import submit_quiz
 from apps.topics.services import get_or_create_topic
-from services.llm import LLMError, StepDraft
+from services.llm import LLMConfigurationError, LLMError, StepDraft
 
 PASSWORD = "S0me-str0ng-pass!"
 
@@ -49,6 +49,13 @@ class FailingClient:
 
     def generate_plan(self, request):
         raise LLMError("boom")
+
+
+class ConfigFailingClient:
+    name = "unconfigured"
+
+    def generate_plan(self, request):
+        raise LLMConfigurationError("LLM_API_KEY is empty.")
 
 
 class FixedClient:

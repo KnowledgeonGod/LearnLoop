@@ -76,6 +76,24 @@ Where the resources come from:
 If one read source is down, the other still supplies links. No resource is repeated
 inside a plan.
 
+### Check your setup
+
+After editing `.env`, run:
+
+```powershell
+.\venv\Scripts\python.exe manage.py check_backends
+```
+
+It prints the selected backends, whether each required key is present, and exits with
+code 1 when a required key is missing. It never prints a secret value. Add `--test` to
+make one small live request to each configured backend (this can use a few LLM tokens):
+
+```powershell
+.\venv\Scripts\python.exe manage.py check_backends --test
+```
+
+Restart `runserver` after changing `.env`.
+
 ### Refill and pagination
 
 Each topic/step type remembers which pages it has already fetched. When feedback
@@ -86,6 +104,35 @@ users and refreshed after seven days.
 
 If every resource in a section is hidden, the section is removed from the plan page.
 Hidden resources stay in a collapsed panel so a dislike or skip can be undone.
+
+## Troubleshooting
+
+### "We couldn't build your plan right now"
+
+1. Run `.\venv\Scripts\python.exe manage.py check_backends`.
+2. If it reports `api key: MISSING`, open `.env` (not `.env.example`, which is only
+   the tracked template) and either add a real key:
+
+   ```dotenv
+   LLM_BACKEND=openai
+   LLM_API_KEY=sk-...
+   ```
+
+   or use the offline planner while you get one:
+
+   ```dotenv
+   LLM_BACKEND=fake
+   ```
+
+3. If it reports `YouTube key: MISSING`, watch steps will have no resources. Add
+   `YOUTUBE_API_KEY=...`, or set `RESOURCE_BACKEND=fake` to use offline search links.
+4. If `check_backends --test` reports `no credits remaining`, add credits to the
+   provider account, or keep `LLM_BACKEND=fake`.
+5. Restart `runserver`, then try the plan again.
+
+The plan page shows the configuration message directly when a backend is selected but
+its key is empty. Other provider errors stay generic on purpose; the full reason is in
+the server log.
 
 ## Project layout
 

@@ -12,7 +12,12 @@ from apps.topics.models import Topic
 
 from .personalize import ranker_for, reasons_for
 from .selectors import get_plan_page
-from .services import PlanGenerationFailed, QuizRequired, generate_plan
+from .services import (
+    PlanConfigurationFailed,
+    PlanGenerationFailed,
+    QuizRequired,
+    generate_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +81,12 @@ def generate(request, topic_id):
         learning_plan = generate_plan(user=request.user, topic=topic)
     except QuizRequired:
         return redirect("quiz", topic_id=topic.pk)
+    except PlanConfigurationFailed as exc:
+        # Configuration messages are written by us and never contain a key, so the
+        # user can act on them instead of seeing a dead end.
+        logger.exception("Plan backend is not configured (user=%s, topic=%s)", request.user.pk, topic.pk)
+        context = _plan_context(request.user, topic, error=str(exc))
+        return render(request, "learning/plan.html", context, status=503)
     except PlanGenerationFailed:
         # Log the real reason for us, show a generic message to the user.
         logger.exception("Plan generation failed (user=%s, topic=%s)", request.user.pk, topic.pk)
