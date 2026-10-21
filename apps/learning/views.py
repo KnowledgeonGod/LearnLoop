@@ -1,5 +1,5 @@
 import logging
-
+from apps.feedback.selectors import feedback_for
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -22,7 +22,11 @@ def _plan_context(user, topic, **extra):
     rows = []
     if page.plan:
         by_step = resources_by_step(page.plan)
-        rows = [(step, by_step.get(step.pk, [])) for step in page.plan.steps.all()]
+        mine = feedback_for(user, [r for found in by_step.values() for r in found])  # one query
+        rows = [
+            (step, [(resource, mine.get(resource.pk)) for resource in by_step.get(step.pk, [])])
+            for step in page.plan.steps.all()
+        ]
     return {
         "topic": topic,
         "page": page,
@@ -30,7 +34,6 @@ def _plan_context(user, topic, **extra):
         "missing_resources": any(not found for _, found in rows),
         **extra,
     }
-
 
 @login_required
 def plan(request, topic_id):

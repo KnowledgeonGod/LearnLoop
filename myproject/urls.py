@@ -7,4 +7,5 @@ urlpatterns = [
     path("", include("apps.topics.urls")),
     path("", include("apps.quiz.urls")),
     path("", include("apps.learning.urls")),
+    path("", include("apps.feedback.urls")),
 ]

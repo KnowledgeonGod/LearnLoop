@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "apps.quiz",
     "apps.learning",
     "apps.resources",
+    "apps.feedback",
 
 ]
 

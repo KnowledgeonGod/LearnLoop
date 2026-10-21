@@ -11,6 +11,7 @@
   {% if page.state == "stale" %}
     <p>Your answers changed since this plan was made. Rebuild it to match them.</p>
   {% endif %}
+
   {% if rows %}
     <ol>
       {% for step, found in rows %}
@@ -20,9 +21,10 @@
         {{ step.explanation }}
         {% if found %}
         <ul>
-          {% for resource in found %}
+          {% for resource, fb in found %}
           <li>{{ resource.get_kind_display }}:
             <a href="{{ resource.url }}" target="_blank" rel="noopener noreferrer">{{ resource.title }}</a>
+            {% include "feedback/_buttons.html" %}
           </li>
           {% endfor %}
         </ul>
@@ -34,6 +36,7 @@
       <p>Some resources could not be loaded. Rebuild your plan to try again.</p>
     {% endif %}
   {% endif %}
+
   <form method="post" action="{% url 'plan_generate' topic.pk %}">
     {% csrf_token %}
     <button type="submit">

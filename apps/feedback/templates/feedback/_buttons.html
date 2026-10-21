@@ -1,0 +1,23 @@
+<form method="post" action="{% url 'resource_feedback' resource.pk %}">
+  {% csrf_token %}
+  {% if fb.rating == "like" %}
+    <button name="action" value="clear_rating">Liked (undo)</button>
+  {% else %}
+    <button name="action" value="like">Like</button>
+  {% endif %}
+  {% if fb.rating == "dislike" %}
+    <button name="action" value="clear_rating">Disliked (undo)</button>
+  {% else %}
+    <button name="action" value="dislike">Dislike</button>
+  {% endif %}
+  {% if fb.progress == "done" %}
+    <button name="action" value="clear_progress">Done (undo)</button>
+  {% else %}
+    <button name="action" value="done">Mark done</button>
+  {% endif %}
+  {% if fb.progress == "skipped" %}
+    <button name="action" value="clear_progress">Skipped (undo)</button>
+  {% else %}
+    <button name="action" value="skip">Skip</button>
+  {% endif %}
+</form>
