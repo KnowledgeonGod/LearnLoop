@@ -52,6 +52,20 @@ LLM_MODEL=gpt-4o-mini
 The model is asked for strict JSON, but the parser also tolerates Markdown fences and
 surrounding prose. Every field is still validated by the app before it is saved.
 
+Any OpenAI-compatible endpoint works. For example, Google Gemini's free tier:
+
+```dotenv
+LLM_BACKEND=openai
+LLM_API_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+LLM_API_KEY=your-gemini-key
+LLM_MODEL=gemini-3.8-flash
+LLM_MAX_TOKENS=8192
+LLM_TIMEOUT=120
+```
+
+Reasoning models spend output tokens on internal thinking, so they need a larger
+`LLM_MAX_TOKENS` and `LLM_TIMEOUT` than the defaults.
+
 ### Resources: `RESOURCE_BACKEND`
 
 | Value | Behaviour |
@@ -128,7 +142,11 @@ Hidden resources stay in a collapsed panel so a dislike or skip can be undone.
    `YOUTUBE_API_KEY=...`, or set `RESOURCE_BACKEND=fake` to use offline search links.
 4. If `check_backends --test` reports `no credits remaining`, add credits to the
    provider account, or keep `LLM_BACKEND=fake`.
-5. Restart `runserver`, then try the plan again.
+5. If it reports `ran out of output tokens`, raise `LLM_MAX_TOKENS` (for example 8192)
+   and `LLM_TIMEOUT` (for example 120). This is common with reasoning models.
+6. A transient HTTP 5xx or rate limit is retried automatically; if it still fails,
+   wait a moment and try again.
+7. Restart `runserver`, then try the plan again.
 
 The plan page shows the configuration message directly when a backend is selected but
 its key is empty. Other provider errors stay generic on purpose; the full reason is in

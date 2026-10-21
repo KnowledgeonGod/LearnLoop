@@ -3,6 +3,7 @@ To use a real model later, add a client class with the same two members
 (`name` and `generate_plan`) and register it in CLIENTS."""
 import json
 import re
+import time
 from dataclasses import asdict, dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -173,8 +174,15 @@ def _http_error(exc: HTTPError) -> LLMError:
     return LLMError(f"The language model request failed: HTTP {status}.")
 
 
+_TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
 def _post_json(url, payload, *, headers=None) -> dict:
-    """POST JSON and return the decoded response. Raises LLMError on any failure."""
+    """POST JSON and return the decoded response. Raises LLMError on any failure.
+
+    Transient provider problems (rate limits, 5xx) are retried a couple of times.
+    Permanent problems (bad key, no credits, bad model) are raised immediately.
+    """
     body = json.dumps(payload).encode("utf-8")
     request = Request(
         url,
@@ -188,13 +196,26 @@ def _post_json(url, payload, *, headers=None) -> dict:
             **(headers or {}),
         },
     )
-    try:
-        with urlopen(request, timeout=getattr(settings, "LLM_TIMEOUT", 30)) as response:
-            raw = response.read()
-    except HTTPError as exc:
-        raise _http_error(exc) from exc
-    except (URLError, OSError, TimeoutError) as exc:
-        raise LLMError(f"The language model request failed: {exc}") from exc
+    attempts = max(int(getattr(settings, "LLM_RETRIES", 2)), 0)
+    for attempt in range(attempts + 1):
+        try:
+            with urlopen(request, timeout=getattr(settings, "LLM_TIMEOUT", 30)) as response:
+                raw = response.read()
+            break
+        except HTTPError as exc:
+            error = _http_error(exc)
+            if (
+                exc.code in _TRANSIENT_STATUSES
+                and not isinstance(error, LLMConfigurationError)
+                and attempt < attempts
+            ):
+                time.sleep(getattr(settings, "LLM_RETRY_DELAY", 1.5) * (attempt + 1))
+                continue
+            raise error from exc
+        except (URLError, OSError, TimeoutError) as exc:
+            raise LLMError(f"The language model request failed: {exc}") from exc
+    else:
+        raise LLMError("The language model request failed after retries.")
 
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -306,9 +327,16 @@ class OpenAIClient:
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         data = _post_json(api_url, payload, headers=headers)
         try:
-            content = data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
         except (KeyError, IndexError, TypeError):
             raise LLMError("The language model response had no message content.") from None
+        if finish_reason == "length":
+            raise LLMConfigurationError(
+                "The model ran out of output tokens before finishing the plan. "
+                "Increase LLM_MAX_TOKENS in .env (for example 8192)."
+            )
         return _steps_from_text(content)
 
 

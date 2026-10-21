@@ -13,5 +13,10 @@ class OfflineBackendsTestRunner(DiscoverRunner):
         settings.LLM_BACKEND = "fake"
         settings.RESOURCE_BACKEND = "fake"
         settings.LLM_API_KEY = ""
+        settings.LLM_API_URL = "https://api.openai.com/v1/chat/completions"
+        settings.LLM_MODEL = "gpt-4o-mini"
+        settings.LLM_TIMEOUT = 30
+        settings.LLM_MAX_TOKENS = 1200
         settings.YOUTUBE_API_KEY = ""
         settings.GITHUB_TOKEN = ""
+        settings.LLM_RETRIES = 0

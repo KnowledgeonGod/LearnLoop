@@ -193,6 +193,20 @@ class OpenAIClientTests(SimpleTestCase):  # unit tests, network always mocked
                 with self.assertRaises(LLMError):
                     self.llm.generate_plan(make_request())
 
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_a_truncated_response_is_reported_as_a_token_limit_problem(self, post):
+        post.return_value = {
+            "choices": [
+                {
+                    "message": {"content": '{"steps": [{"title": "A"'},
+                    "finish_reason": "length",
+                }
+            ]
+        }
+        with self.assertRaisesMessage(LLMConfigurationError, "LLM_MAX_TOKENS"):
+            self.llm.generate_plan(make_request())
+
     @override_settings(LLM_API_KEY="")
     def test_a_missing_key_is_a_configuration_error(self):
         with self.assertRaisesMessage(LLMConfigurationError, "LLM_API_KEY"):
@@ -306,3 +320,22 @@ class PostJsonTests(SimpleTestCase):
                 self.assertIs(type(caught.exception), expected)
                 self.assertIn(message, str(caught.exception))
                 self.assertNotIn("sk-", str(caught.exception))
+
+    @override_settings(LLM_RETRIES=2, LLM_RETRY_DELAY=0)
+    @patch("services.llm.time.sleep")
+    @patch("services.llm.urlopen")
+    def test_transient_provider_errors_are_retried(self, urlopen_mock, sleep):
+        error = HTTPError("https://example.com", 503, "error", {}, io.BytesIO(b"{}"))
+        urlopen_mock.side_effect = [error, self.response(b'{"choices": []}')]
+        self.assertEqual(_post_json("https://example.com", {}), {"choices": []})
+        self.assertEqual(urlopen_mock.call_count, 2)
+        sleep.assert_called_once()
+
+    @override_settings(LLM_RETRIES=2, LLM_RETRY_DELAY=0)
+    @patch("services.llm.urlopen")
+    def test_permanent_provider_errors_are_not_retried(self, urlopen_mock):
+        error = HTTPError("https://example.com", 400, "error", {}, io.BytesIO(b"{}"))
+        urlopen_mock.side_effect = error
+        with self.assertRaises(LLMError):
+            _post_json("https://example.com", {})
+        self.assertEqual(urlopen_mock.call_count, 1)

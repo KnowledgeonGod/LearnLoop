@@ -94,6 +94,9 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "30"))
 LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "1200"))
+# Transient provider failures (rate limits, 5xx) are retried with backoff.
+LLM_RETRIES = int(os.environ.get("LLM_RETRIES", "2"))
+LLM_RETRY_DELAY = float(os.environ.get("LLM_RETRY_DELAY", "1.5"))
 
 # Which source provides resources: "fake" (offline) or "real" (YouTube, Open
 # Library, Wikipedia and GitHub). YouTube needs YOUTUBE_API_KEY; GitHub works
