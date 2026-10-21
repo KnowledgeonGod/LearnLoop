@@ -1,9 +1,19 @@
 from itertools import product
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
 
 from apps.learning.services import validate_drafts
-from services.llm import FakeLLMClient, LLMError, PlanRequest, get_llm_client
+from services.llm import (
+    FakeLLMClient,
+    LLMError,
+    OpenAIClient,
+    PlanRequest,
+    _minutes,
+    _post_json,
+    _steps_from_text,
+    get_llm_client,
+)
 
 
 def make_request(**overrides):
@@ -85,7 +95,175 @@ class GetClientTests(SimpleTestCase):
     def test_default_is_the_fake_client(self):
         self.assertIsInstance(get_llm_client(), FakeLLMClient)
 
+    @override_settings(LLM_BACKEND="openai")
+    def test_real_backend_is_selectable(self):
+        self.assertIsInstance(get_llm_client(), OpenAIClient)
+
     @override_settings(LLM_BACKEND="nope")
     def test_unknown_backend_raises(self):
         with self.assertRaises(LLMError):
             get_llm_client()
+
+
+class OpenAIClientTests(SimpleTestCase):  # unit tests, network always mocked
+    llm = OpenAIClient()
+
+    def content(self, text):
+        return {"choices": [{"message": {"content": text}}]}
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_a_valid_response_becomes_step_drafts(self, post):
+        post.return_value = self.content(
+            '{"steps": ['
+            '{"title": "  Start   here ", "explanation": " Do this. ", "minutes": 30, "step_type": "read"},'
+            '{"title": "Watch it", "explanation": "Then watch.", "minutes": 45.0, "step_type": "watch"},'
+            '{"title": "Try it", "explanation": "Then build.", "minutes": "60", "step_type": "practice"},'
+            '{"title": "Review", "explanation": "Finally review.", "minutes": 15, "step_type": "read"}'
+            "]}"
+        )
+        steps = self.llm.generate_plan(make_request())
+        self.assertEqual(len(steps), 4)
+        self.assertEqual(steps[0].title, "Start here")
+        self.assertEqual(steps[1].minutes, 45)
+        self.assertEqual(steps[2].minutes, 60)
+        validate_drafts(steps)  # the app's own validator accepts the output
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_markdown_fences_and_prose_are_tolerated(self, post):
+        post.return_value = self.content(
+            "Here is your plan:\n```json\n"
+            '{"steps": [{"title": "A", "explanation": "B", "minutes": 20, "step_type": "read"}]}\n'
+            "```\nEnjoy!"
+        )
+        self.assertEqual(len(self.llm.generate_plan(make_request())), 1)
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_a_bare_list_is_accepted(self, post):
+        post.return_value = self.content(
+            '[{"title": "A", "explanation": "B", "minutes": 20, "step_type": "read"}]'
+        )
+        self.assertEqual(len(self.llm.generate_plan(make_request())), 1)
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_the_key_is_sent_as_a_header(self, post):
+        post.return_value = self.content(
+            '{"steps": [{"title": "A", "explanation": "B", "minutes": 20, "step_type": "read"}]}'
+        )
+        self.llm.generate_plan(make_request())
+        _, kwargs = post.call_args
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key")
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_unusable_steps_are_skipped(self, post):
+        post.return_value = self.content(
+            '{"steps": ['
+            '"not an object",'
+            '{"title": 5, "explanation": "B", "minutes": 20, "step_type": "read"},'
+            '{"title": "No minutes", "explanation": "B", "step_type": "read"},'
+            '{"title": "Good", "explanation": "B", "minutes": 20, "step_type": "read"}'
+            "]}"
+        )
+        steps = self.llm.generate_plan(make_request())
+        self.assertEqual([s.title for s in steps], ["Good"])
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_an_empty_or_invalid_answer_is_an_error(self, post):
+        for content in ("", "hello", '{"steps": "nope"}', '{"steps": []}', "{}"):
+            with self.subTest(content=content):
+                post.return_value = self.content(content)
+                with self.assertRaises(LLMError):
+                    self.llm.generate_plan(make_request())
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm._post_json")
+    def test_a_response_without_content_is_an_error(self, post):
+        for body in ({}, {"choices": []}, {"choices": [{}]}, {"choices": [{"message": {}}]}):
+            with self.subTest(body=body):
+                post.return_value = body
+                with self.assertRaises(LLMError):
+                    self.llm.generate_plan(make_request())
+
+    @override_settings(LLM_API_KEY="")
+    def test_a_missing_key_is_a_clear_error(self):
+        with self.assertRaisesMessage(LLMError, "LLM_API_KEY"):
+            self.llm.generate_plan(make_request())
+
+    @override_settings(
+        LLM_API_KEY="",
+        LLM_API_URL="http://localhost:11434/v1/chat/completions",
+    )
+    @patch("services.llm._post_json")
+    def test_a_local_endpoint_does_not_need_a_key(self, post):
+        post.return_value = self.content(
+            '{"steps": [{"title": "A", "explanation": "B", "minutes": 20, "step_type": "read"}]}'
+        )
+        self.llm.generate_plan(make_request())
+        _, kwargs = post.call_args
+        self.assertEqual(kwargs["headers"], {})
+
+    def test_minutes_accepts_only_sane_values(self):
+        self.assertEqual(_minutes(30), 30)
+        self.assertEqual(_minutes(30.0), 30)
+        self.assertEqual(_minutes("30"), 30)
+        for bad in (True, False, 30.5, "thirty", None, [], {}):
+            with self.subTest(bad=bad):
+                self.assertIsNone(_minutes(bad))
+
+    @override_settings(LLM_API_KEY="test-key")
+    @patch("services.llm.urlopen", side_effect=OSError("offline"))
+    def test_network_errors_become_llm_errors(self, _):
+        with self.assertRaises(LLMError):
+            self.llm.generate_plan(make_request())
+
+    def test_steps_from_text_rejects_non_json(self):
+        with self.assertRaises(LLMError):
+            _steps_from_text("no json here")
+
+    def test_json_embedded_in_prose_is_found(self):
+        steps = _steps_from_text(
+            'Here you go: {"steps": [{"title": "A", "explanation": "B", '
+            '"minutes": 20, "step_type": "read"}]} Enjoy!'
+        )
+        self.assertEqual([s.title for s in steps], ["A"])
+
+    def test_incomplete_or_malformed_json_is_rejected(self):
+        for text in ('{"steps": [', '{"steps": [}'):
+            with self.subTest(text=text):
+                with self.assertRaises(LLMError):
+                    _steps_from_text(text)
+
+    def test_a_non_string_step_type_is_skipped(self):
+        with self.assertRaises(LLMError):
+            _steps_from_text(
+                '{"steps": [{"title": "A", "explanation": "B", "minutes": 20, "step_type": 5}]}'
+            )
+
+
+class PostJsonTests(SimpleTestCase):
+    def response(self, raw):
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = raw
+        return response
+
+    def test_a_valid_response_is_decoded(self):
+        with patch("services.llm.urlopen", return_value=self.response(b'{"choices": []}')):
+            self.assertEqual(_post_json("https://example.com", {}), {"choices": []})
+
+    def test_invalid_json_is_an_llm_error(self):
+        for raw in (b"not json", b"\xff"):
+            with self.subTest(raw=raw):
+                with patch("services.llm.urlopen", return_value=self.response(raw)):
+                    with self.assertRaises(LLMError):
+                        _post_json("https://example.com", {})
+
+    def test_non_object_json_is_an_llm_error(self):
+        with patch("services.llm.urlopen", return_value=self.response(b"[]")):
+            with self.assertRaises(LLMError):
+                _post_json("https://example.com", {})

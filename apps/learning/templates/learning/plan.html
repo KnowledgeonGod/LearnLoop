@@ -12,7 +12,13 @@
     <p>Your answers changed since this plan was made. Rebuild it to match them.</p>
   {% endif %}
 
-  {% if rows %}
+  {% if hidden_section %}
+    {% if hidden %}
+      <p>No resources are left for this plan. Undo a dislike or skip below to see them again.</p>
+    {% else %}
+      <p>No resources are available for this plan right now.</p>
+    {% endif %}
+  {% elif rows %}
     <ol>
       {% for step, found in rows %}
       <li>
@@ -21,9 +27,10 @@
         {{ step.explanation }}
         {% if found %}
         <ul>
-          {% for resource, fb in found %}
+          {% for resource, fb, why in found %}
           <li>{{ resource.get_kind_display }}:
             <a href="{{ resource.url }}" target="_blank" rel="noopener noreferrer">{{ resource.title }}</a>
+            {% if why %}<br><small>{{ why|join:", " }}</small>{% endif %}
             {% include "feedback/_buttons.html" %}
           </li>
           {% endfor %}
@@ -32,9 +39,20 @@
       </li>
       {% endfor %}
     </ol>
-    {% if missing_resources %}
-      <p>Some resources could not be loaded. Rebuild your plan to try again.</p>
-    {% endif %}
+  {% endif %}
+
+  {% if hidden %}
+    <details>
+      <summary>Hidden resources ({{ hidden|length }})</summary>
+      <p>These are kept out of your plan. Undo a dislike or skip, then rebuild the plan.</p>
+      <ul>
+        {% for fb in hidden %}
+        <li>{{ fb.resource.get_kind_display }}: {{ fb.resource.title }}
+          {% with resource=fb.resource %}{% include "feedback/_buttons.html" %}{% endwith %}
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
   {% endif %}
 
   <form method="post" action="{% url 'plan_generate' topic.pk %}">

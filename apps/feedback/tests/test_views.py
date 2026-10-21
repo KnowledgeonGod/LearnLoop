@@ -3,6 +3,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from apps.feedback.models import ResourceFeedback
+from apps.resources.models import StepResource
 
 from .helpers import a_resource_of_kind, make_plan_with_resources, make_resource, make_topic, make_user, scores
 
@@ -75,6 +76,17 @@ class FeedbackViewTests(TestCase):  # integration tests
         self.client.post(self.url, {"action": "clear_rating"})
         self.assertEqual(ResourceFeedback.objects.count(), 0)
         self.assertEqual(scores(self.alice)["video"], 0)
+
+    def test_undo_still_works_after_a_rebuild_hid_the_resource(self):
+        self.client.post(self.url, {"action": "dislike"})
+        self.client.post(reverse("plan_generate", args=[self.topic.pk]))
+        # The rebuild removed the link, so the old "in my plan" rule would 404.
+        self.assertFalse(
+            StepResource.objects.filter(resource=self.video, step__plan__user=self.alice).exists()
+        )
+        resp = self.client.post(self.url, {"action": "clear_rating"})
+        self.assertRedirects(resp, self.plan_url)
+        self.assertFalse(ResourceFeedback.objects.filter(user=self.alice, resource=self.video).exists())
 
     def test_post_without_csrf_token_is_rejected(self):  # CSRF
         client = Client(enforce_csrf_checks=True)

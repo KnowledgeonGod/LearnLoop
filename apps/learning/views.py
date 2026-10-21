@@ -1,14 +1,16 @@
 import logging
-from apps.feedback.selectors import feedback_for
+
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
+from apps.feedback.selectors import feedback_for, hidden_feedback_for
 from apps.resources.selectors import resources_by_step
 from apps.resources.services import attach_resources
 from apps.topics.models import Topic
 
+from .personalize import ranker_for, reasons_for
 from .selectors import get_plan_page
 from .services import PlanGenerationFailed, QuizRequired, generate_plan
 
@@ -20,20 +22,44 @@ GENERIC_ERROR = "We couldn't build your plan right now. Please try again in a mo
 def _plan_context(user, topic, **extra):
     page = get_plan_page(user, topic)  # always this user's own plan
     rows = []
+    hidden_section = False
+    hidden = []
     if page.plan:
+        hidden = list(hidden_feedback_for(user, topic))  # one query
+        hidden_ids = {row.resource_id for row in hidden}
         by_step = resources_by_step(page.plan)
-        mine = feedback_for(user, [r for found in by_step.values() for r in found])  # one query
+        # Hidden resources are filtered out immediately, even before a rebuild, so the
+        # plan and the "hidden" list can never show the same resource twice.
+        visible = {
+            step_id: [resource for resource in found if resource.pk not in hidden_ids]
+            for step_id, found in by_step.items()
+        }
+        shown = [resource for found in visible.values() for resource in found]
+        mine = feedback_for(user, shown)  # one query
+        why = reasons_for(user, topic, shown)  # two queries
+        # A step with no resources is not useful. When every resource of a type has
+        # been hidden by feedback (or could not be fetched), its whole section goes.
         rows = [
-            (step, [(resource, mine.get(resource.pk)) for resource in by_step.get(step.pk, [])])
+            (
+                step,
+                [
+                    (resource, mine.get(resource.pk), why.get(resource.pk, []))
+                    for resource in visible.get(step.pk, [])
+                ],
+            )
             for step in page.plan.steps.all()
+            if visible.get(step.pk)
         ]
+        hidden_section = bool(page.plan.steps.exists()) and not rows
     return {
         "topic": topic,
         "page": page,
         "rows": rows,
-        "missing_resources": any(not found for _, found in rows),
+        "hidden_section": hidden_section,
+        "hidden": hidden,
         **extra,
     }
+
 
 @login_required
 def plan(request, topic_id):
@@ -57,7 +83,7 @@ def generate(request, topic_id):
         return render(request, "learning/plan.html", context, status=503)
 
     try:
-        attach_resources(plan=learning_plan)
+        attach_resources(plan=learning_plan, rank=ranker_for(request.user, topic))
     except Exception:  # best effort: a plan without links is still useful
         logger.exception("Attaching resources failed (plan=%s)", learning_plan.pk)
     return redirect("plan", topic_id=topic.pk)

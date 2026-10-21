@@ -15,6 +15,12 @@ class ResourceKind(models.TextChoices):
     EXERCISE = "exercise", "Exercise"
 
 
+class FetchStepType(models.TextChoices):
+    READ = "read", "Read"
+    WATCH = "watch", "Watch"
+    PRACTICE = "practice", "Practice"
+
+
 class Resource(models.Model):
     """Shared catalog entry: one row per (topic, url), reused by every user who studies
     that topic. It holds no user data. Feedback will attach to it later."""
@@ -45,6 +51,35 @@ class Resource(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ResourceFetch(models.Model):
+    """Which page of a source was already fetched for a topic and step type.
+
+    It is what makes refill move forward (page 1, 2, ...) instead of asking for
+    page 0 again every rebuild. It holds no user data, so it can be shared."""
+
+    topic = models.ForeignKey("topics.Topic", on_delete=models.CASCADE, related_name="resource_fetches")
+    step_type = models.CharField(max_length=20, choices=FetchStepType.choices)
+    page = models.PositiveIntegerField(default=0)
+    fetched_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["topic", "step_type", "page"], name="unique_resource_fetch_page"
+            ),
+            models.CheckConstraint(
+                condition=Q(step_type__in=FetchStepType.values),
+                name="resource_fetch_step_type_valid",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["topic", "step_type", "-page"], name="resource_fetch_cursor_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.topic} / {self.step_type} / page {self.page}"
 
 
 class StepResource(models.Model):

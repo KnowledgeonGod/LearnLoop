@@ -86,9 +86,22 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1 
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
-# Which client builds learning plans: "fake" (offline, deterministic) for now
+# Which client builds learning plans: "fake" (offline, deterministic) or "openai"
+# (OpenAI-compatible chat completions, including local servers).
 LLM_BACKEND = os.environ.get("LLM_BACKEND", "fake")
+LLM_API_URL = os.environ.get("LLM_API_URL", "https://api.openai.com/v1/chat/completions")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "30"))
+LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "1200"))
+
+# Which source provides resources: "fake" (offline) or "real" (YouTube, Open
+# Library, Wikipedia and GitHub). YouTube needs YOUTUBE_API_KEY; GitHub works
+# without a token but has a lower rate limit.
 RESOURCE_BACKEND = os.environ.get("RESOURCE_BACKEND", "fake")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "10"))
 
 AUTH_PASSWORD_VALIDATORS = [
     {
