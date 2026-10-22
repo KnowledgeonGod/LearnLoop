@@ -17,7 +17,7 @@ load_dotenv(BASE_DIR / ".env")
 
 # Secrets management: from the environment, never hardcoded
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
-DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() in {"1", "true"}
+DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() in {"1", "true", "yes"}
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h]
 
 
