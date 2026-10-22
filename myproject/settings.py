@@ -1,10 +1,18 @@
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Tests use an in-memory SQLite database by default so they never touch the
+# hosted database in .env. Set DATABASE_URL in the shell to opt into another
+# test database.
+if "test" in sys.argv:
+    os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+
 load_dotenv(BASE_DIR / ".env")
 
 # Secrets management: from the environment, never hardcoded
