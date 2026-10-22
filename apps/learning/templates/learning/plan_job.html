@@ -1,0 +1,60 @@
+{% extends "accounts/base.html" %}
+{% block content %}
+<h1>{{ topic.name }}: building your plan</h1>
+
+{% if job.status == "failed" %}
+  <p><strong>We couldn't build your plan.</strong></p>
+  {% if job.error %}<p>{{ job.error }}</p>{% endif %}
+  <p><a href="{% url 'plan' topic.pk %}">Back to the plan</a></p>
+{% else %}
+  <p id="plan-job-status">Your plan is queued. This page updates automatically.</p>
+  <p>You can leave this page open while LearnLoop builds your plan.</p>
+
+  <p id="plan-job-worker-warning" {% if not worker_may_be_stopped %}hidden{% endif %}>
+    <strong>The background worker does not appear to be running.</strong>
+    Start it in a second terminal:
+    <code>python manage.py run_plan_worker</code>
+  </p>
+
+  <p><a href="{% url 'plan' topic.pk %}">Back to the plan</a></p>
+
+  <script>
+    (function () {
+      const statusUrl = "{{ status_url|escapejs }}";
+      const statusElement = document.getElementById("plan-job-status");
+      const warningElement = document.getElementById("plan-job-worker-warning");
+
+      async function poll() {
+        try {
+          const response = await fetch(statusUrl, {
+            headers: {"Accept": "application/json"},
+            cache: "no-store"
+          });
+          if (!response.ok) throw new Error("status request failed");
+          const data = await response.json();
+
+          if (data.status === "succeeded" && data.redirect_url) {
+            window.location.href = data.redirect_url;
+            return;
+          }
+          if (data.status === "failed") {
+            window.location.reload();
+            return;
+          }
+          if (data.worker_may_be_stopped) {
+            warningElement.hidden = false;
+          }
+          statusElement.textContent =
+            "Your plan is " + data.status_display.toLowerCase() + ". This page updates automatically.";
+          setTimeout(poll, 2000);
+        } catch (error) {
+          setTimeout(poll, 4000);
+        }
+      }
+
+      setTimeout(poll, 1000);
+    }());
+  </script>
+  <noscript><p>Refresh this page to see the latest status.</p></noscript>
+{% endif %}
+{% endblock %}

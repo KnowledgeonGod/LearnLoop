@@ -2,13 +2,17 @@
 To use a real source later, add a class with `name` and `find(query)` and register it
 in CLIENTS. Real clients must turn their own errors into FetchError."""
 import json
+import logging
 import re
+import time
 from dataclasses import dataclass
 from urllib.error import URLError
 from urllib.parse import quote, quote_plus, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 class FetchError(Exception):
@@ -99,6 +103,7 @@ YOUTUBE_SEARCH = "https://www.googleapis.com/youtube/v3/search"
 OPEN_LIBRARY_SEARCH = "https://openlibrary.org/search.json"
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 GITHUB_SEARCH = "https://api.github.com/search/repositories"
+GOOGLE_BOOKS_SEARCH = "https://www.googleapis.com/books/v1/volumes"
 
 # Query variants give each page new results for APIs that do not expose an offset.
 YOUTUBE_VARIANTS = ("", "tutorial", "course", "explained", "lecture")
@@ -137,18 +142,19 @@ class RealFetcher:
     """Fetches real resources from public APIs.
 
     - watch:    YouTube Data API (needs YOUTUBE_API_KEY)
-    - read:     Open Library books + Wikipedia articles (no key)
+    - read:     Open Library books + Wikipedia articles + Google Books (no key)
     - practice: GitHub repository search (works without a token; GITHUB_TOKEN raises
                 the rate limit)
 
     Each call asks for one `page`, so the caller can refill a plan without showing the
-    same links again. If one read source is down the other still supplies resources.
+    same links again. If one read source is down the others still supply resources.
     """
 
     name = "real"
     limit = 10
 
     def find(self, query: ResourceQuery) -> list[ResourceDraft]:
+        started = time.monotonic()
         page = max(int(getattr(query, "page", 0) or 0), 0)
         if query.step_type == "watch":
             drafts = self._youtube(query.topic, page)
@@ -164,7 +170,12 @@ class RealFetcher:
             if draft.url not in seen:
                 seen.add(draft.url)
                 unique.append(draft)
-        return unique[: self.limit]
+        unique = unique[: self.limit]
+        logger.info(
+            "Resource fetch source=%s step=%s page=%s count=%s duration=%.2fs",
+            self.name, query.step_type, page, len(unique), time.monotonic() - started,
+        )
+        return unique
 
     def _youtube(self, topic, page):
         api_key = getattr(settings, "YOUTUBE_API_KEY", "")
@@ -211,16 +222,22 @@ class RealFetcher:
         return drafts
 
     def _read(self, topic, page):
-        half = max(1, self.limit // 2)
+        sources = (
+            (self._openlibrary, "openlibrary"),
+            (self._wikipedia, "wikipedia"),
+            (self._googlebooks, "googlebooks"),
+        )
+        base, extra = divmod(self.limit, len(sources))
         drafts, errors = [], []
-        for source, take in (
-            (self._openlibrary, half),
-            (self._wikipedia, self.limit - half),
-        ):
+        for index, (source, name) in enumerate(sources):
+            take = base + (1 if index < extra else 0)
+            if take <= 0:
+                continue
             try:
                 drafts.extend(source(topic, page, take))
             except FetchError as exc:
                 errors.append(exc)
+                logger.warning("Read source failed (%s): %s", name, exc)
         if not drafts and errors:
             raise FetchError("; ".join(str(exc) for exc in errors))
         return drafts
@@ -295,6 +312,44 @@ class RealFetcher:
                         "wikipedia",
                     )
                 )
+        return drafts
+
+    def _googlebooks(self, topic, page, limit):
+        data = _get_json(
+            GOOGLE_BOOKS_SEARCH,
+            {
+                "q": topic,
+                "startIndex": page * limit,
+                "maxResults": limit,
+                "printType": "books",
+            },
+        )
+        items = data.get("items")
+        if items is None:
+            return []  # Google Books omits `items` when there are no matches.
+        if not isinstance(items, list):
+            raise FetchError("Google Books returned an unexpected response.")
+
+        drafts = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            volume = item.get("volumeInfo")
+            if not isinstance(volume, dict):
+                continue
+            title = volume.get("title")
+            if not isinstance(title, str) or not title.strip():
+                continue
+
+            info_link = volume.get("infoLink")
+            volume_id = item.get("id")
+            if isinstance(info_link, str) and info_link.startswith("https://"):
+                url = info_link
+            elif isinstance(volume_id, str) and re.fullmatch(r"[A-Za-z0-9_-]+", volume_id):
+                url = f"https://books.google.com/books?id={volume_id}"
+            else:
+                continue
+            drafts.append(ResourceDraft("book", title, url, "googlebooks"))
         return drafts
 
     def _github(self, topic, page):

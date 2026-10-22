@@ -130,32 +130,76 @@ class RealFetcherTests(SimpleTestCase):  # unit tests (network is always mocked)
             self.find("watch")
 
     @patch("services.fetchers._get_json")
-    def test_read_combines_open_library_and_wikipedia(self, get_json):
+    def test_read_combines_three_sources(self, get_json):
         get_json.side_effect = [
             {"docs": [{"key": "/works/OL1W", "title": "A real book"}]},
             {"query": {"search": [{"title": "Python (programming language)"}]}},
+            {"items": [{"id": "GB1", "volumeInfo": {"title": "A Google book"}}]},
         ]
         drafts = self.find("read")
-        self.assertEqual([d.kind for d in drafts], ["book", "article"])
+        self.assertEqual([d.kind for d in drafts], ["book", "article", "book"])
         self.assertEqual(drafts[0].url, "https://openlibrary.org/works/OL1W")
         self.assertEqual(
             drafts[1].url, "https://en.wikipedia.org/wiki/Python_%28programming_language%29"
         )
+        self.assertEqual(drafts[2].url, "https://books.google.com/books?id=GB1")
+        self.assertEqual(drafts[2].source, "googlebooks")
 
     @patch("services.fetchers._get_json")
     def test_read_survives_one_source_being_down(self, get_json):
         get_json.side_effect = [
             FetchError("open library down"),
             {"query": {"search": [{"title": "Still useful"}]}},
+            {"items": []},
         ]
         drafts = self.find("read")
         self.assertEqual([d.title for d in drafts], ["Still useful"])
 
     @patch("services.fetchers._get_json")
-    def test_read_fails_only_when_both_sources_fail(self, get_json):
-        get_json.side_effect = [FetchError("one"), FetchError("two")]
+    def test_read_fails_only_when_all_sources_fail(self, get_json):
+        get_json.side_effect = [FetchError("one"), FetchError("two"), FetchError("three")]
         with self.assertRaises(FetchError):
             self.find("read")
+
+    @patch("services.fetchers._get_json")
+    def test_google_books_maps_volumes_and_skips_bad_links(self, get_json):
+        get_json.return_value = {
+            "items": [
+                {
+                    "id": "GB1",
+                    "volumeInfo": {
+                        "title": "A Google book",
+                        "infoLink": "https://books.google.com/books/about/GB1.html",
+                    },
+                },
+                {"id": "bad id", "volumeInfo": {"title": "Unsafe id"}},
+                {"id": "GB2", "volumeInfo": {"title": ""}},
+                "not a dict",
+            ]
+        }
+        drafts = self.fetcher._googlebooks("Python", 0, 5)
+        self.assertEqual(
+            drafts,
+            [
+                ResourceDraft(
+                    "book",
+                    "A Google book",
+                    "https://books.google.com/books/about/GB1.html",
+                    "googlebooks",
+                )
+            ],
+        )
+
+    @patch("services.fetchers._get_json")
+    def test_google_books_without_items_is_empty(self, get_json):
+        get_json.return_value = {"totalItems": 0}
+        self.assertEqual(self.fetcher._googlebooks("Python", 0, 5), [])
+
+    @patch("services.fetchers._get_json")
+    def test_google_books_malformed_payload_is_an_error(self, get_json):
+        get_json.return_value = {"items": "nope"}
+        with self.assertRaises(FetchError):
+            self.fetcher._googlebooks("Python", 0, 5)
 
     @patch("services.fetchers._get_json")
     def test_practice_maps_github_repositories(self, get_json):
@@ -172,12 +216,13 @@ class RealFetcherTests(SimpleTestCase):  # unit tests (network is always mocked)
         )
 
     @patch("services.fetchers._get_json")
-    def test_page_is_forwarded_to_the_source(self, get_json):
-        get_json.return_value = {"query": {"search": []}, "docs": []}
+    def test_page_is_forwarded_to_every_read_source(self, get_json):
+        get_json.return_value = {"query": {"search": []}, "docs": [], "items": []}
         self.find("read", page=2)
         offsets = [call.args[1] for call in get_json.call_args_list]
         self.assertEqual(offsets[0]["page"], 3)  # Open Library is 1-based
-        self.assertEqual(offsets[1]["sroffset"], 10)  # Wikipedia is 0-based
+        self.assertEqual(offsets[1]["sroffset"], 6)  # Wikipedia: page * per-source limit
+        self.assertEqual(offsets[2]["startIndex"], 6)  # Google Books is 0-based
 
     @patch("services.fetchers._get_json")
     def test_results_are_deduplicated(self, get_json):
@@ -239,15 +284,16 @@ class RealFetcherTests(SimpleTestCase):  # unit tests (network is always mocked)
             {"items": [1, {"id": {"videoId": "abc12"}, "snippet": {"title": "Ok"}}]},
             {"docs": [1, {"key": "/works/OL1W", "title": "Book"}]},
             {"query": {"search": [1, {"title": "Article"}]}},
+            {"items": [1, {"id": "GB1", "volumeInfo": {"title": "Google book"}}]},
             {"items": [1, {"full_name": "a/b", "html_url": "https://github.com/a/b"}]},
         ]
         self.assertEqual(len(self.find("watch")), 1)
-        self.assertEqual(len(self.find("read")), 2)
+        self.assertEqual(len(self.find("read")), 3)
         self.assertEqual(len(self.find("practice")), 1)
 
     @patch("services.fetchers._get_json")
     def test_wikipedia_malformed_payload_is_an_error(self, get_json):
-        get_json.side_effect = [{"docs": []}, {"query": "nope"}]
+        get_json.side_effect = [{"docs": []}, {"query": "nope"}, {"items": []}]
         with self.assertRaises(FetchError):
             self.find("read")
 

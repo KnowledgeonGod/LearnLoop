@@ -3,6 +3,9 @@
 <h1>{{ topic.name }}: your learning plan</h1>
 
 {% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+{% if quota_remaining is not None %}
+  <p><small>{{ quota_remaining }} plan build{{ quota_remaining|pluralize }} left today.</small></p>
+{% endif %}
 
 {% if page.state == "needs_quiz" %}
   <p>Answer a quick quiz first, so the plan fits you.</p>
@@ -53,6 +56,13 @@
         {% endfor %}
       </ul>
     </details>
+  {% endif %}
+
+  {% if active_job %}
+    <p>
+      <strong>A plan build is already in progress.</strong>
+      <a href="{% url 'plan_job_progress' topic.pk active_job.pk %}">View progress</a>
+    </p>
   {% endif %}
 
   <form method="post" action="{% url 'plan_generate' topic.pk %}">

@@ -2,6 +2,7 @@
 To use a real model later, add a client class with the same two members
 (`name` and `generate_plan`) and register it in CLIENTS."""
 import json
+import logging
 import re
 import time
 from dataclasses import asdict, dataclass
@@ -10,6 +11,8 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMError(Exception):
@@ -209,10 +212,20 @@ def _post_json(url, payload, *, headers=None) -> dict:
                 and not isinstance(error, LLMConfigurationError)
                 and attempt < attempts
             ):
+                logger.warning(
+                    "LLM provider returned HTTP %s; retrying (%s/%s)",
+                    exc.code, attempt + 1, attempts,
+                )
                 time.sleep(getattr(settings, "LLM_RETRY_DELAY", 1.5) * (attempt + 1))
                 continue
             raise error from exc
         except (URLError, OSError, TimeoutError) as exc:
+            if attempt < attempts:
+                logger.warning(
+                    "LLM provider request failed; retrying (%s/%s)", attempt + 1, attempts
+                )
+                time.sleep(getattr(settings, "LLM_RETRY_DELAY", 1.5) * (attempt + 1))
+                continue
             raise LLMError(f"The language model request failed: {exc}") from exc
     else:
         raise LLMError("The language model request failed after retries.")
@@ -303,7 +316,18 @@ class OpenAIClient:
 
     name = "openai"
 
+    def __init__(self):
+        # The service layer records these for cost/usage reporting. They are
+        # optional: a fake or test client does not need to provide them.
+        self.last_usage = None
+        self.last_model = None
+
     def generate_plan(self, request: PlanRequest) -> list[StepDraft]:
+        started = time.monotonic()
+        # A reused client must not report the previous call's usage if this one fails
+        # before the provider returns a usage object.
+        self.last_usage = None
+        self.last_model = None
         api_url = getattr(settings, "LLM_API_URL", "https://api.openai.com/v1/chat/completions")
         api_key = getattr(settings, "LLM_API_KEY", "")
         # OpenAI itself requires a key. A local server (Ollama, vLLM) usually does not,
@@ -326,6 +350,10 @@ class OpenAIClient:
         }
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         data = _post_json(api_url, payload, headers=headers)
+        usage = data.get("usage")
+        self.last_usage = usage if isinstance(usage, dict) else None
+        returned_model = data.get("model")
+        self.last_model = returned_model if isinstance(returned_model, str) else None
         try:
             choice = data["choices"][0]
             content = choice["message"]["content"]
@@ -337,7 +365,12 @@ class OpenAIClient:
                 "The model ran out of output tokens before finishing the plan. "
                 "Increase LLM_MAX_TOKENS in .env (for example 8192)."
             )
-        return _steps_from_text(content)
+        steps = _steps_from_text(content)
+        logger.info(
+            "LLM plan generated model=%s steps=%s duration=%.2fs",
+            self.last_model or payload["model"], len(steps), time.monotonic() - started,
+        )
+        return steps
 
 
 CLIENTS = {"fake": FakeLLMClient, "openai": OpenAIClient}

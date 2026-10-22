@@ -104,7 +104,7 @@ class Command(BaseCommand):
                     "  YouTube key: MISSING - watch steps will have no resources"
                 )
             )
-        self.stdout.write(self.style.SUCCESS("  Open Library / Wikipedia: no key needed (read steps)"))
+        self.stdout.write(self.style.SUCCESS("  Open Library / Wikipedia / Google Books: no key needed (read steps)"))
         if github_token and github_token.strip():
             self.stdout.write(self.style.SUCCESS("  GitHub token: set (practice steps)"))
         else:

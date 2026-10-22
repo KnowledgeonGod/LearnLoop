@@ -63,13 +63,30 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+#
+# SQLite is the zero-configuration default. Set DB_ENGINE=postgres for production
+# (and install the driver: pip install "psycopg[binary]").
+DB_ENGINE = os.environ.get("DB_ENGINE", "sqlite").strip().lower()
+if DB_ENGINE in {"postgres", "postgresql"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DB_NAME", "learnloop"),
+            "USER": os.environ.get("DB_USER", ""),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        }
     }
-}
+else:
+    _db_name = os.environ.get("DB_NAME", "")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": Path(_db_name) if _db_name else BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation
@@ -99,12 +116,26 @@ LLM_RETRIES = int(os.environ.get("LLM_RETRIES", "2"))
 LLM_RETRY_DELAY = float(os.environ.get("LLM_RETRY_DELAY", "1.5"))
 
 # Which source provides resources: "fake" (offline) or "real" (YouTube, Open
-# Library, Wikipedia and GitHub). YouTube needs YOUTUBE_API_KEY; GitHub works
-# without a token but has a lower rate limit.
+# Library, Wikipedia, Google Books and GitHub). YouTube needs YOUTUBE_API_KEY;
+# GitHub works without a token but has a lower rate limit.
 RESOURCE_BACKEND = os.environ.get("RESOURCE_BACKEND", "fake")
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 FETCH_TIMEOUT = int(os.environ.get("FETCH_TIMEOUT", "10"))
+
+# Background plan generation. Disabled by default so a fresh clone works with a
+# single process; enable it and run `python manage.py run_plan_worker` to keep the
+# browser request fast when real providers take 30-90 seconds.
+PLAN_JOBS_ENABLED = os.environ.get("PLAN_JOBS_ENABLED", "0") == "1"
+PLAN_JOB_POLL_SECONDS = float(os.environ.get("PLAN_JOB_POLL_SECONDS", "2"))
+# After this many seconds in QUEUED, the progress page warns that the worker may be down.
+PLAN_JOB_WORKER_HINT_SECONDS = int(os.environ.get("PLAN_JOB_WORKER_HINT_SECONDS", "10"))
+# A worker that dies while a job is RUNNING would otherwise strand it forever.
+PLAN_JOB_STALE_MINUTES = int(os.environ.get("PLAN_JOB_STALE_MINUTES", "30"))
+
+# Cost controls. 0 means unlimited; 20 is a sensible paid-provider default.
+PLAN_DAILY_LIMIT = int(os.environ.get("PLAN_DAILY_LIMIT", "0"))
+LLM_USAGE_TRACKING = os.environ.get("LLM_USAGE_TRACKING", "1") == "1"
 
 # Keep tests offline even when .env selects the real backends.
 TEST_RUNNER = "myproject.test_runner.OfflineBackendsTestRunner"
@@ -141,6 +172,33 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
+# Logging: one console handler, no secrets. Set DJANGO_LOG_LEVEL=DEBUG for more detail.
+LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "apps": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "services": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+    },
+}
 
 
 # Email
@@ -159,3 +217,23 @@ LOGOUT_REDIRECT_URL = "login"
 
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+
+# Production security. These can be overridden for a local HTTPS test.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+SECURE_SSL_REDIRECT = os.environ.get(
+    "DJANGO_SECURE_SSL_REDIRECT", "0" if DEBUG else "1"
+) == "1"
+SECURE_HSTS_SECONDS = int(
+    os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000")
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+if os.environ.get("DJANGO_TRUST_X_FORWARDED_PROTO", "0") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

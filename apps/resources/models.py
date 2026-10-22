@@ -47,6 +47,7 @@ class Resource(models.Model):
         indexes = [
             # serves the cache lookup: topic + kind + not too old
             models.Index(fields=["topic", "kind", "-fetched_at"], name="resource_cache_lookup_idx"),
+            models.Index(fields=["fetched_at"], name="resource_fetched_at_idx"),
         ]
 
     def __str__(self):
@@ -76,6 +77,7 @@ class ResourceFetch(models.Model):
         ]
         indexes = [
             models.Index(fields=["topic", "step_type", "-page"], name="resource_fetch_cursor_idx"),
+            models.Index(fields=["fetched_at"], name="resource_fetch_fetched_idx"),
         ]
 
     def __str__(self):

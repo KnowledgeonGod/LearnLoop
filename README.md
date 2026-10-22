@@ -27,6 +27,20 @@ Run the tests with:
 .\venv\Scripts\python.exe manage.py test
 ```
 
+### Background plan generation (optional)
+
+Real providers can take 30-90 seconds. Set `PLAN_JOBS_ENABLED=1` in `.env` and run the
+worker in a second terminal:
+
+```powershell
+.\venv\Scripts\python.exe manage.py run_plan_worker
+```
+
+The browser gets a progress page immediately; the worker does the slow LLM and
+resource calls. `run_plan_worker --once` drains the current queue and exits, which is
+handy for cron or a one-shot deployment. If the worker is not running, the progress
+page tells you after a few seconds.
+
 ## Backends
 
 Both backends default to deterministic, offline fakes, so the app works without any
@@ -71,7 +85,7 @@ Reasoning models spend output tokens on internal thinking, so they need a larger
 | Value | Behaviour |
 |---|---|
 | `fake` (default) | Offline search links, 8 per page. |
-| `real` | YouTube, Open Library, Wikipedia and GitHub. |
+| `real` | YouTube, Open Library, Wikipedia, Google Books and GitHub. |
 
 ```dotenv
 RESOURCE_BACKEND=real
@@ -84,11 +98,12 @@ GITHUB_TOKEN=...
 Where the resources come from:
 
 - **Watch** — YouTube Data API v3 (requires `YOUTUBE_API_KEY`).
-- **Read** — Open Library books + Wikipedia articles (no key needed).
+- **Read** — Open Library books, Wikipedia articles and Google Books (no key needed).
 - **Practice** — GitHub repository search (works without a token).
 
-If one read source is down, the other still supplies links. No resource is repeated
-inside a plan.
+If one read source is down, the other two still supply links. Results are diversified
+across sources, so a step's two links do not both come from the same provider when an
+alternative exists. No resource is repeated inside a plan.
 
 ### Check your setup
 
@@ -118,6 +133,56 @@ users and refreshed after seven days.
 
 If every resource in a section is hidden, the section is removed from the plan page.
 Hidden resources stay in a collapsed panel so a dislike or skip can be undone.
+
+## Cost controls and usage
+
+Set a per-user daily allowance when using a paid provider:
+
+```dotenv
+PLAN_DAILY_LIMIT=20
+LLM_USAGE_TRACKING=1
+```
+
+`0` means unlimited. The allowance is checked before a background job is queued and
+consumed when the plan is actually generated. API calls record prompt/completion token
+usage by day and model. Resource fetches are already recorded per topic, page and day.
+See them in the admin, or print a recent summary:
+
+```powershell
+.\venv\Scripts\python.exe manage.py usage_report --days 7
+```
+
+## Cache maintenance
+
+The shared resource cache is reused by everyone studying the same topic. Two commands
+keep it healthy:
+
+```powershell
+# Delete unlinked resources and fetch cursors older than 30 days.
+.\venv\Scripts\python.exe manage.py prune_resources --days 30 --dry-run
+.\venv\Scripts\python.exe manage.py prune_resources --days 30
+
+# Force a fresh page-zero fetch for one topic/step type.
+.\venv\Scripts\python.exe manage.py refresh_resources --topic 12 --step-type read
+```
+
+`prune_resources` never deletes a resource that is still linked to a plan.
+`refresh_resources --all` can make many provider calls; use `--dry-run` first.
+
+## Health and logs
+
+`GET /healthz/` returns JSON with the database status, selected backend names, whether
+background jobs are enabled, and the queued-job count. It never exposes a key or user
+data. A database failure returns HTTP 503.
+
+Application logs go to the console with level `INFO` by default. Set
+`DJANGO_LOG_LEVEL=DEBUG` for more detail. LLM and resource calls log timing and failures
+without logging prompts, API keys or user content.
+
+## Production
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for PostgreSQL, Waitress, static files, HTTPS and
+worker setup.
 
 ## Troubleshooting
 

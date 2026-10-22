@@ -84,3 +84,19 @@ class RankedAttachTests(TestCase):
         links = StepResource.objects.filter(step__plan=plan)
         self.assertEqual(links.count(), 1)
         self.assertEqual(links.values("step_id").distinct().count(), 1)
+
+    def test_a_step_gets_different_sources_when_possible(self):
+        topic = make_topic("Diversity")
+        plan = make_plan(self.user, topic)  # mix: two watch steps
+        drafts = [
+            draft(title=f"Video {index}", url=f"https://example.com/{index}", source=source)
+            for index, source in enumerate(("one", "two", "one", "two"), start=1)
+        ]
+        attach_resources(plan=plan, fetcher=FixedFetcher(drafts))
+        step = plan.steps.filter(step_type="watch").first()
+        sources = list(
+            StepResource.objects.filter(step=step)
+            .order_by("position")
+            .values_list("resource__source", flat=True)
+        )
+        self.assertEqual(sources, ["one", "two"])

@@ -2,7 +2,7 @@ from collections import namedtuple
 
 from django.test import SimpleTestCase
 
-from services.ranking import Signals, is_hidden, rank, reasons, score_parts, total
+from services.ranking import Signals, diversify, is_hidden, rank, reasons, score_parts, total
 
 Res = namedtuple("Res", "pk title source")
 
@@ -125,6 +125,33 @@ class RankTests(SimpleTestCase):
     def test_real_sources_beat_search_links(self):
         items = [res(1, source="search"), res(2, source="youtube")]
         self.assertEqual(pks(rank(items, {}, None)), [2, 1])
+
+    def test_google_books_is_a_trusted_source(self):
+        items = [res(1, source="search"), res(2, source="googlebooks")]
+        self.assertEqual(pks(rank(items, {}, None)), [2, 1])
+
+
+class DiversifyTests(SimpleTestCase):
+    def test_round_robins_sources_and_keeps_the_best_first(self):
+        items = [
+            res(1, source="openlibrary"),
+            res(2, source="openlibrary"),
+            res(3, source="wikipedia"),
+            res(4, source="googlebooks"),
+        ]
+        self.assertEqual(pks(diversify(items)), [1, 3, 4, 2])
+
+    def test_one_source_keeps_its_order(self):
+        items = [res(3, source="fake"), res(1, source="fake"), res(2, source="fake")]
+        self.assertEqual(pks(diversify(items)), [3, 1, 2])
+
+    def test_empty_input(self):
+        self.assertEqual(diversify([]), [])
+
+    def test_input_is_not_modified(self):
+        items = [res(1, source="a"), res(2, source="b")]
+        diversify(items)
+        self.assertEqual(pks(items), [1, 2])
 
 
 class ReasonTests(SimpleTestCase):

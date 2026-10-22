@@ -18,6 +18,7 @@ SOURCE_TRUST = {
     "youtube": 3.0,
     "openlibrary": 3.0,
     "wikipedia": 3.0,
+    "googlebooks": 3.0,
     "github": 3.0,
 }  # real results beat generic search links
 
@@ -93,6 +94,29 @@ def total(parts) -> float:
 def is_hidden(signals) -> bool:
     """Things this person disliked or skipped are not shown to them again."""
     return signals.rating == DISLIKE or signals.progress == SKIPPED
+
+
+def diversify(resources) -> list:
+    """Round-robin resources by source, preserving each source's internal order.
+
+    A step gets up to two links; without this, the top two could both be books from
+    the same provider. The first (best-ranked) resource stays first. The function
+    never invents, drops, or repeats a resource.
+    """
+    buckets, source_order = {}, []
+    for resource in resources:
+        source = getattr(resource, "source", "") or ""
+        if source not in buckets:
+            buckets[source] = []
+            source_order.append(source)
+        buckets[source].append(resource)
+
+    ordered = []
+    while any(buckets[source] for source in source_order):
+        for source in source_order:
+            if buckets[source]:
+                ordered.append(buckets[source].pop(0))
+    return ordered
 
 
 def rank(resources, signals, level) -> list:

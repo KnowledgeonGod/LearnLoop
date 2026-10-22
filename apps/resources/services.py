@@ -7,6 +7,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from services.fetchers import FetchError, ResourceQuery, get_fetcher
+from services.ranking import diversify
 
 from .models import (
     MAX_SOURCE_LENGTH,
@@ -242,7 +243,7 @@ def attach_resources(*, plan, fetcher=None, rank=None) -> int:
             continue
 
         pool = list(fetched)
-        ranked = _ordered(pool, rank)
+        ranked = diversify(_ordered(pool, rank))
         needed = len(type_steps) * RESOURCES_PER_STEP
 
         # The user may have hidden most of page 0. Ask the source for the next page
@@ -264,7 +265,7 @@ def attach_resources(*, plan, fetcher=None, rank=None) -> int:
                 break
             seen = {resource.pk for resource in pool}
             pool.extend(resource for resource in more if resource.pk not in seen)
-            ranked = _ordered(pool, rank)
+            ranked = diversify(_ordered(pool, rank))
 
         found[step_type] = ranked
 

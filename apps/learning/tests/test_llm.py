@@ -241,6 +241,15 @@ class OpenAIClientTests(SimpleTestCase):  # unit tests, network always mocked
         with self.assertRaises(LLMError):
             self.llm.generate_plan(make_request())
 
+    @override_settings(LLM_API_KEY="test-key", LLM_RETRIES=2, LLM_RETRY_DELAY=0)
+    @patch("services.llm.time.sleep")
+    @patch("services.llm.urlopen", side_effect=OSError("offline"))
+    def test_network_errors_are_retried(self, urlopen_mock, sleep):
+        with self.assertRaises(LLMError):
+            self.llm.generate_plan(make_request())
+        self.assertEqual(urlopen_mock.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+
     def test_steps_from_text_rejects_non_json(self):
         with self.assertRaises(LLMError):
             _steps_from_text("no json here")

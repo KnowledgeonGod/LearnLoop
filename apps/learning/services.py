@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -13,8 +14,10 @@ from .models import (
     MIN_STEPS,
     LearningPlan,
     PlanStep,
+    PlanUsage,
     StepType,
 )
+from .usage import record_llm_usage
 
 
 class QuizRequired(Exception):
@@ -29,8 +32,64 @@ class PlanConfigurationFailed(PlanGenerationFailed):
     """The selected backend is missing configuration. Its message is safe to show."""
 
 
+class PlanQuotaExceeded(PlanGenerationFailed):
+    """The user has used today's plan-build allowance. Its message is safe to show."""
+
+
 class InvalidPlan(PlanGenerationFailed):
     pass
+
+
+def _plan_daily_limit() -> int:
+    try:
+        return max(int(getattr(settings, "PLAN_DAILY_LIMIT", 0)), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _plan_usage_today(user) -> int:
+    return (
+        PlanUsage.objects.filter(user=user, day=timezone.localdate())
+        .values_list("count", flat=True)
+        .first()
+        or 0
+    )
+
+
+def plan_usage_remaining(user):
+    """How many builds are left today, or None when the limit is disabled."""
+    limit = _plan_daily_limit()
+    if limit <= 0:
+        return None
+    return max(limit - _plan_usage_today(user), 0)
+
+
+def ensure_plan_quota_available(user) -> None:
+    """Check without consuming, so a queued job can fail fast at enqueue time."""
+    limit = _plan_daily_limit()
+    if limit <= 0:
+        return
+    if _plan_usage_today(user) >= limit:
+        raise PlanQuotaExceeded(
+            f"You have reached today's limit of {limit} plan builds. Try again tomorrow."
+        )
+
+
+def consume_plan_quota(user) -> None:
+    """Consume one build. The row is locked so concurrent requests cannot overspend."""
+    limit = _plan_daily_limit()
+    if limit <= 0:
+        return
+    with transaction.atomic():
+        usage, _ = PlanUsage.objects.select_for_update().get_or_create(
+            user=user, day=timezone.localdate(), defaults={"count": 0}
+        )
+        if usage.count >= limit:
+            raise PlanQuotaExceeded(
+                f"You have reached today's limit of {limit} plan builds. Try again tomorrow."
+            )
+        usage.count += 1
+        usage.save(update_fields=["count"])
 
 
 def validate_drafts(drafts) -> list:
@@ -74,6 +133,10 @@ def generate_plan(*, user, topic, client=None) -> LearningPlan:
     if attempt is None:
         raise QuizRequired()
 
+    # Check before the slow call so an exhausted user does not spend provider tokens.
+    # The allowance is consumed only after a usable plan has been validated.
+    ensure_plan_quota_available(user)
+
     request = PlanRequest(
         topic=topic.name,
         level=attempt.level,
@@ -88,12 +151,17 @@ def generate_plan(*, user, topic, client=None) -> LearningPlan:
     # is held while we wait on a network call.
     try:
         client = client or get_llm_client()
-        drafts = client.generate_plan(request)
+        try:
+            drafts = client.generate_plan(request)
+        finally:
+            # Record provider usage even when the call raised later in parsing.
+            record_llm_usage(client)
     except LLMConfigurationError as exc:
         raise PlanConfigurationFailed(str(exc)) from exc
     except LLMError as exc:
         raise PlanGenerationFailed(str(exc)) from exc
     steps = validate_drafts(drafts)
+    consume_plan_quota(user)
 
     with transaction.atomic():  # plan and steps: all or nothing
         # update_or_create locks the plan row, so two simultaneous rebuilds queue up.
