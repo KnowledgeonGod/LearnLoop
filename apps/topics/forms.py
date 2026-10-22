@@ -4,7 +4,16 @@ from .services import MAX_TOPIC_LENGTH, InvalidTopic, clean_topic_name
 
 
 class TopicSearchForm(forms.Form):
-    query = forms.CharField(max_length=MAX_TOPIC_LENGTH, label="What do you want to learn?")
+    query = forms.CharField(
+        max_length=MAX_TOPIC_LENGTH,
+        label="What do you want to learn?",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "Try 'Python', 'music theory', or 'public speaking'",
+                "autocomplete": "off",
+            }
+        ),
+    )
 
     def clean_query(self):
         try:

@@ -4,6 +4,10 @@ from .models import ANSWER_FIELDS, QuizAttempt
 
 
 class QuizForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.label_suffix = ""
+
     class Meta:
         model = QuizAttempt
         fields = ANSWER_FIELDS
@@ -16,8 +20,8 @@ class QuizForm(forms.ModelForm):
             "depth": "How deep do you want to go?",
         }
         widgets = {
-            "level": forms.RadioSelect,
-            "goal": forms.RadioSelect,
-            "preferred_format": forms.RadioSelect,
-            "depth": forms.RadioSelect,
+            "level": forms.RadioSelect(attrs={"class": "choice-grid"}),
+            "goal": forms.RadioSelect(attrs={"class": "choice-grid"}),
+            "preferred_format": forms.RadioSelect(attrs={"class": "choice-grid"}),
+            "depth": forms.RadioSelect(attrs={"class": "choice-grid"}),
         }

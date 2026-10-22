@@ -1,10 +1,41 @@
 {% extends "accounts/base.html" %}
+{% block title %}Learning preferences — LearnLoop{% endblock %}
 {% block content %}
-<h1>Learning preferences</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Save</button>
-</form>
-<p><a href="{% url 'dashboard' %}">Back</a></p>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <span>Preferences</span>
+</nav>
+
+<header class="page-head">
+  <p class="eyebrow">Your account</p>
+  <h1>Learning preferences</h1>
+  <p class="lede">Choose the format you reach for most. LearnLoop still mixes in other resources, but this nudges every new plan in your direction.</p>
+</header>
+
+<div class="profile-grid">
+  <section class="profile-card">
+    <span class="avatar avatar--lg" aria-hidden="true">{{ request.user.name|first|upper }}</span>
+    <h2>{{ request.user.name }}</h2>
+    <p class="muted">{{ request.user.email }}</p>
+    <div class="profile-meta">
+      <p>Member since <span>{{ request.user.date_joined|date:"F Y" }}</span></p>
+      <p>Privacy <span>Plans and feedback are private to your account</span></p>
+    </div>
+  </section>
+
+  <section class="form-card">
+    <p class="eyebrow">Default format</p>
+    <h2>How do you like to learn?</h2>
+    <p class="muted">You can still change this while taking a topic quiz.</p>
+    <form method="post" class="prose-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button class="button button--primary" type="submit">Save preferences</button>
+        <a class="button button--ghost" href="{% url 'dashboard' %}">Back to dashboard</a>
+      </div>
+    </form>
+  </section>
+</div>
 {% endblock %}

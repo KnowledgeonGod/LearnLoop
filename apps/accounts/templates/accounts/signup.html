@@ -1,10 +1,33 @@
 {% extends "accounts/base.html" %}
+{% block title %}Create your account — LearnLoop{% endblock %}
 {% block content %}
-<h1>Create your account</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Sign up</button>
-</form>
-<p>Already have an account? <a href="{% url 'login' %}">Log in</a></p>
+<div class="auth-layout">
+  <aside class="auth-visual">
+    <div class="auth-visual__content">
+      <p class="eyebrow">Begin here</p>
+      <h2>Build a learning habit that holds.</h2>
+      <p>One subject at a time, one honest step at a time. LearnLoop keeps the path clear and the pace yours.</p>
+      <ul class="auth-points">
+        <li>Plans sized to the time you actually have</li>
+        <li>Resources from trusted libraries and creators</li>
+        <li>Your progress stays private</li>
+      </ul>
+    </div>
+  </aside>
+
+  <section class="auth-panel">
+    <div class="auth-card">
+      <p class="eyebrow">Join LearnLoop</p>
+      <h1>Create your account</h1>
+      <p class="muted">A minute to sign up. A better way to begin.</p>
+      <form method="post" class="prose-form">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="button button--primary button--block" type="submit">Sign up</button>
+      </form>
+      <p class="auth-switch">Already have an account? <a href="{% url 'login' %}">Log in</a></p>
+      <p class="auth-note">We ask only for your name, email and a password. No public profile is created.</p>
+    </div>
+  </section>
+</div>
 {% endblock %}

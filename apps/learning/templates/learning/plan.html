@@ -1,77 +1,140 @@
 {% extends "accounts/base.html" %}
+{% block title %}{{ topic.name }} plan — LearnLoop{% endblock %}
 {% block content %}
-<h1>{{ topic.name }}: your learning plan</h1>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'topic_detail' topic.pk %}">{{ topic.name }}</a>
+  <span aria-hidden="true">/</span>
+  <span>Plan</span>
+</nav>
 
-{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
-{% if quota_remaining is not None %}
-  <p><small>{{ quota_remaining }} plan build{{ quota_remaining|pluralize }} left today.</small></p>
+<header class="page-head page-head--split">
+  <div>
+    <p class="eyebrow">Your learning plan</p>
+    <h1>{{ topic.name }}</h1>
+    <p class="lede">A considered path through the subject, sized to your week and shaped by your feedback.</p>
+  </div>
+  <div class="head-actions">
+    {% if quota_remaining is not None %}
+      <span class="chip">{{ quota_remaining }} plan build{{ quota_remaining|pluralize }} left today</span>
+    {% endif %}
+    {% if page.plan %}
+      <span class="chip">{{ page.plan.steps.all|length }} step{{ page.plan.steps.all|length|pluralize }}</span>
+    {% endif %}
+  </div>
+</header>
+
+{% if error %}
+  <div class="notice notice--danger" role="alert">
+    <div><strong>{{ error }}</strong></div>
+  </div>
 {% endif %}
 
 {% if page.state == "needs_quiz" %}
-  <p>Answer a quick quiz first, so the plan fits you.</p>
-  <p><a href="{% url 'quiz' topic.pk %}">Take the quiz</a></p>
+  <section class="form-card text-center">
+    <span class="empty-state__mark" aria-hidden="true">?</span>
+    <h2>A plan that fits you</h2>
+    <p class="lede center-lede">Answer a quick quiz first, so the plan fits you.</p>
+    <div class="button-row button-row--center">
+      <a class="button button--primary" href="{% url 'quiz' topic.pk %}">Take the quiz</a>
+    </div>
+  </section>
 {% else %}
   {% if page.state == "stale" %}
-    <p>Your answers changed since this plan was made. Rebuild it to match them.</p>
+    <div class="notice notice--warning">
+      <div><strong>Your answers changed since this plan was made.</strong> Rebuild it to match them.</div>
+    </div>
+  {% endif %}
+
+  {% if active_job %}
+    <div class="notice notice--info">
+      <div><strong>A plan build is already in progress.</strong> You can follow along while we work.</div>
+      <a class="button button--ghost button--small" href="{% url 'plan_job_progress' topic.pk active_job.pk %}">View progress</a>
+    </div>
   {% endif %}
 
   {% if hidden_section %}
-    {% if hidden %}
-      <p>No resources are left for this plan. Undo a dislike or skip below to see them again.</p>
-    {% else %}
-      <p>No resources are available for this plan right now.</p>
-    {% endif %}
+    <div class="empty-state">
+      <span class="empty-state__mark" aria-hidden="true">✦</span>
+      <h2>Nothing to show yet</h2>
+      {% if hidden %}
+        <p>No resources are left for this plan. Undo a dislike or skip below to see them again.</p>
+      {% else %}
+        <p>No resources are available for this plan right now.</p>
+      {% endif %}
+    </div>
   {% elif rows %}
-    <ol>
+    <ol class="plan-timeline">
       {% for step, found in rows %}
-      <li>
-        <strong>{{ step.title }}</strong>
-        ({{ step.get_step_type_display }}, about {{ step.minutes }} min)<br>
-        {{ step.explanation }}
-        {% if found %}
-        <ul>
-          {% for resource, fb, why in found %}
-          <li>{{ resource.get_kind_display }}:
-            <a href="{{ resource.url }}" target="_blank" rel="noopener noreferrer">{{ resource.title }}</a>
-            {% if why %}<br><small>{{ why|join:", " }}</small>{% endif %}
-            {% include "feedback/_buttons.html" %}
-          </li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-      </li>
+        <li class="step-card">
+          <span class="step-number" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
+          <div class="step-body">
+            <div class="step-meta">
+              <span class="pill">{{ step.get_step_type_display }}</span>
+              <span class="chip">About {{ step.minutes }} min</span>
+            </div>
+            <h2 class="step-title">{{ step.title }}</h2>
+            <p class="step-explanation">{{ step.explanation }}</p>
+
+            {% if found %}
+              <ul class="resource-list">
+                {% for resource, fb, why in found %}
+                  <li class="resource-card">
+                    <div class="resource-card__top">
+                      <a class="resource-link" href="{{ resource.url }}" target="_blank" rel="noopener noreferrer">
+                        <span>{{ resource.title }}</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/>
+                          <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                      </a>
+                      <span class="kind-pill">{{ resource.get_kind_display }}</span>
+                    </div>
+                    {% if why %}
+                      <p class="resource-why"><span class="spark" aria-hidden="true">✦</span> {{ why|join:", " }}</p>
+                    {% endif %}
+                    {% include "feedback/_buttons.html" %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </div>
+        </li>
       {% endfor %}
     </ol>
   {% endif %}
 
   {% if hidden %}
-    <details>
+    <details class="hidden-panel">
       <summary>Hidden resources ({{ hidden|length }})</summary>
       <p>These are kept out of your plan. Undo a dislike or skip, then rebuild the plan.</p>
-      <ul>
+      <ul class="hidden-list">
         {% for fb in hidden %}
-        <li>{{ fb.resource.get_kind_display }}: {{ fb.resource.title }}
-          {% with resource=fb.resource %}{% include "feedback/_buttons.html" %}{% endwith %}
-        </li>
+          <li class="hidden-item">
+            <span class="hidden-item__title">
+              {{ fb.resource.title }}
+              <span class="kind-pill">{{ fb.resource.get_kind_display }}</span>
+            </span>
+            {% with resource=fb.resource %}{% include "feedback/_buttons.html" %}{% endwith %}
+          </li>
         {% endfor %}
       </ul>
     </details>
   {% endif %}
 
-  {% if active_job %}
-    <p>
-      <strong>A plan build is already in progress.</strong>
-      <a href="{% url 'plan_job_progress' topic.pk active_job.pk %}">View progress</a>
-    </p>
-  {% endif %}
-
-  <form method="post" action="{% url 'plan_generate' topic.pk %}">
+  <form method="post" action="{% url 'plan_generate' topic.pk %}" class="plan-cta">
     {% csrf_token %}
-    <button type="submit">
+    <div>
+      <h2>{% if page.plan %}Want a different mix?{% else %}Ready to begin?{% endif %}</h2>
+      <p>{% if page.plan %}Rebuild the plan after changing your answers or feedback. Your choices stay private to your account.{% else %}We'll use your quiz answers to build a plan sized to your week.{% endif %}</p>
+    </div>
+    <button class="button button--accent" type="submit">
       {% if page.plan %}Rebuild my plan{% else %}Create my plan{% endif %}
     </button>
   </form>
 {% endif %}
 
-<p><a href="{% url 'topic_detail' topic.pk %}">Back to topic</a></p>
+<p class="small muted back-link"><a href="{% url 'topic_detail' topic.pk %}">Back to topic</a></p>
 {% endblock %}

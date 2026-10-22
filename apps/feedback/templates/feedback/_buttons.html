@@ -1,23 +1,23 @@
-<form method="post" action="{% url 'resource_feedback' resource.pk %}">
+<form method="post" action="{% url 'resource_feedback' resource.pk %}" class="feedback-form">
   {% csrf_token %}
   {% if fb.rating == "like" %}
-    <button name="action" value="clear_rating">Liked (undo)</button>
+    <button class="feedback-button is-active" name="action" value="clear_rating" aria-pressed="true" title="Undo like">Liked (undo)</button>
   {% else %}
-    <button name="action" value="like">Like</button>
+    <button class="feedback-button" name="action" value="like" aria-pressed="false">Like</button>
   {% endif %}
   {% if fb.rating == "dislike" %}
-    <button name="action" value="clear_rating">Disliked (undo)</button>
+    <button class="feedback-button is-active" name="action" value="clear_rating" aria-pressed="true" title="Undo dislike">Disliked (undo)</button>
   {% else %}
-    <button name="action" value="dislike">Dislike</button>
+    <button class="feedback-button" name="action" value="dislike" aria-pressed="false">Dislike</button>
   {% endif %}
   {% if fb.progress == "done" %}
-    <button name="action" value="clear_progress">Done (undo)</button>
+    <button class="feedback-button is-active" name="action" value="clear_progress" title="Undo done">Done (undo)</button>
   {% else %}
-    <button name="action" value="done">Mark done</button>
+    <button class="feedback-button" name="action" value="done">Mark done</button>
   {% endif %}
   {% if fb.progress == "skipped" %}
-    <button name="action" value="clear_progress">Skipped (undo)</button>
+    <button class="feedback-button is-active" name="action" value="clear_progress" title="Undo skip">Skipped (undo)</button>
   {% else %}
-    <button name="action" value="skip">Skip</button>
+    <button class="feedback-button" name="action" value="skip">Skip</button>
   {% endif %}
 </form>

@@ -1,11 +1,75 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LearnLoop</title>
+  <meta name="theme-color" content="#16211c">
+  <meta name="description" content="LearnLoop turns a subject you want to learn into a personal, step-by-step plan with real resources.">
+  <title>{% block title %}LearnLoop — learn with intention{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
-<body>
-  {% block content %}{% endblock %}
+<body class="{% block body_class %}{% endblock %}">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="{% url 'dashboard' %}" aria-label="LearnLoop home">
+        <span class="brand-mark" aria-hidden="true">L</span>
+        <span class="brand-name">LearnLoop</span>
+      </a>
+
+      {% if request.user.is_authenticated %}
+        <nav class="nav-links" aria-label="Primary">
+          <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active" aria-current="page"{% endif %}>Dashboard</a>
+          <a href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} class="is-active" aria-current="page"{% endif %}>Preferences</a>
+        </nav>
+        <div class="nav-actions">
+          <span class="user-chip" title="{{ request.user.email }}">
+            <span class="avatar" aria-hidden="true">{{ request.user.name|first|upper }}</span>
+            <span class="user-chip__name">{{ request.user.name }}</span>
+          </span>
+          <form method="post" action="{% url 'logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="icon-button" title="Log out" aria-label="Log out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      {% else %}
+        <nav class="nav-links" aria-label="Primary">
+          <a href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' %} class="is-active" aria-current="page"{% endif %}>Log in</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="button button--primary button--small" href="{% url 'signup' %}">Create account</a>
+        </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main id="main" class="page">
+    {% if messages %}
+      <div class="flash-stack" role="status">
+        {% for message in messages %}
+          <div class="flash flash--{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <p>LearnLoop — learn with intention.</p>
+    <p>Private by design. Your plans and feedback stay yours.</p>
+  </footer>
 </body>
 </html>

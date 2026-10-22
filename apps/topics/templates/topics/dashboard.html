@@ -1,34 +1,130 @@
 {% extends "accounts/base.html" %}
+{% block title %}Dashboard — LearnLoop{% endblock %}
 {% block content %}
-<h1>Welcome, {{ request.user.name }}</h1>
+<section class="hero">
+  <div class="hero__content">
+    <p class="eyebrow">Your learning studio</p>
+    <h1>{% if recent %}Welcome back{% else %}Welcome{% endif %}, {{ request.user.name }}.</h1>
+    <p class="lede">Choose a subject, tell us how you learn, and we'll shape a step-by-step plan that meets you where you are.</p>
 
-<form method="post" action="{% url 'topic_search' %}">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Start learning</button>
-</form>
+    <form class="hero-search" method="post" action="{% url 'topic_search' %}">
+      {% csrf_token %}
+      <label class="sr-only" for="{{ form.query.id_for_label }}">{{ form.query.label }}</label>
+      {{ form.query }}
+      <button class="button button--accent" type="submit">Start learning</button>
+    </form>
+    {% if form.query.errors %}
+      <div class="hero-errors" role="alert">{{ form.query.errors }}</div>
+    {% endif %}
 
-{% if recent %}
-<h2>Pick up where you left off</h2>
-<ul>
-  {% for item in recent %}
-  <li><a href="{% url 'topic_detail' item.topic.pk %}">{{ item.topic.name }}</a></li>
-  {% endfor %}
-</ul>
-{% endif %}
+    <ul class="hero-meta">
+      <li>Library-grade resources</li>
+      <li>Plans at your pace</li>
+      <li>Private by default</li>
+    </ul>
+  </div>
+</section>
 
-{% if popular %}
-<h2>Interesting</h2>
-<ul>
-  {% for topic in popular %}
-  <li><a href="{% url 'topic_detail' topic.pk %}">{{ topic.name }}</a></li>
-  {% endfor %}
-</ul>
-{% endif %}
+<section class="metrics" aria-label="Your learning at a glance">
+  <div class="metric">
+    <span class="metric__value">{{ recent|length }}</span>
+    <span class="metric__label">Recent paths</span>
+  </div>
+  <div class="metric">
+    <span class="metric__value">{{ popular|length }}</span>
+    <span class="metric__label">Community picks</span>
+  </div>
+  <div class="metric">
+    <span class="metric__value">100%</span>
+    <span class="metric__label">Private to you</span>
+  </div>
+</section>
 
-<p><a href="{% url 'profile' %}">Learning preferences</a></p>
-<form method="post" action="{% url 'logout' %}">
-  {% csrf_token %}
-  <button type="submit">Log out</button>
-</form>
+<div class="dashboard-grid">
+  <section class="panel" aria-labelledby="recent-heading">
+    <div class="panel__head">
+      <div>
+        <p class="eyebrow">Continue</p>
+        <h2 id="recent-heading">Pick up where you left off</h2>
+      </div>
+      {% if recent %}<span class="chip">{{ recent|length }} path{{ recent|length|pluralize }}</span>{% endif %}
+    </div>
+
+    {% if recent %}
+      <ol class="topic-list">
+        {% for item in recent %}
+          <li>
+            <a class="topic-link" href="{% url 'topic_detail' item.topic.pk %}">
+              <span class="topic-index" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
+              <span class="topic-name">{{ item.topic.name }}</span>
+              <span class="arrow" aria-hidden="true">→</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <div class="empty-state">
+        <span class="empty-state__mark" aria-hidden="true">01</span>
+        <h3>Your first path starts above</h3>
+        <p>Search for a subject you have been meaning to learn. We'll take it from there.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="panel panel--tinted" aria-labelledby="popular-heading">
+    <div class="panel__head">
+      <div>
+        <p class="eyebrow">Discover</p>
+        <h2 id="popular-heading">Curated starting points</h2>
+      </div>
+    </div>
+
+    {% if popular %}
+      <ul class="topic-pills">
+        {% for topic in popular %}
+          <li>
+            <a class="pill-link" href="{% url 'topic_detail' topic.pk %}">
+              {{ topic.name }}
+              <span>{{ topic.searchers }} learner{{ topic.searchers|pluralize }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty-state">
+        <span class="empty-state__mark" aria-hidden="true">✦</span>
+        <h3>Nothing shared yet</h3>
+        <p>Community picks appear once more learners search the same subject.</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+
+<section class="how" aria-labelledby="how-heading">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">How it works</p>
+      <h2 id="how-heading">A serious plan, built gently</h2>
+    </div>
+    <a class="button button--ghost button--small" href="{% url 'profile' %}">Set your preferences</a>
+  </div>
+
+  <ol class="how-steps">
+    <li class="how-step">
+      <span class="how-step__number">01</span>
+      <h3>Choose a subject</h3>
+      <p>Search any topic. We build a shared library of books, videos, articles and practice for it.</p>
+    </li>
+    <li class="how-step">
+      <span class="how-step__number">02</span>
+      <h3>Answer a quick quiz</h3>
+      <p>Tell us your level, goal, schedule and preferred format. It takes about a minute.</p>
+    </li>
+    <li class="how-step">
+      <span class="how-step__number">03</span>
+      <h3>Follow your plan</h3>
+      <p>Get a step-by-step path with real links. Like, skip or finish resources as you go.</p>
+    </li>
+  </ol>
+</section>
 {% endblock %}

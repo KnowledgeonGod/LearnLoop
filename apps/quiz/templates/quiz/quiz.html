@@ -1,10 +1,34 @@
 {% extends "accounts/base.html" %}
+{% block title %}Personalize {{ topic.name }} — LearnLoop{% endblock %}
 {% block content %}
-<h1>Personalize: {{ topic.name }}</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Save my answers</button>
-</form>
-<p><a href="{% url 'topic_detail' topic.pk %}">Back</a></p>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <a href="{% url 'topic_detail' topic.pk %}">{{ topic.name }}</a>
+  <span aria-hidden="true">/</span>
+  <span>Quick quiz</span>
+</nav>
+
+<div class="narrow">
+  <header class="page-head">
+    <p class="eyebrow">Personalize your plan</p>
+    <h1>{{ topic.name }}</h1>
+    <p class="lede">A few quick answers help us choose the right depth, pace and mix of resources. You can change any of this later.</p>
+    <div class="form-intro">
+      <span class="chip">About a minute</span>
+      <span class="chip">Private to your account</span>
+    </div>
+  </header>
+
+  <section class="form-card">
+    <form method="post" class="prose-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="form-actions">
+        <button class="button button--primary" type="submit">Save my answers</button>
+        <a class="button button--ghost" href="{% url 'topic_detail' topic.pk %}">Back to topic</a>
+      </div>
+    </form>
+  </section>
+</div>
 {% endblock %}

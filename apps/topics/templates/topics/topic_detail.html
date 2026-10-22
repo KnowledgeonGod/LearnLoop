@@ -1,9 +1,64 @@
 {% extends "accounts/base.html" %}
+{% block title %}{{ topic.name }} — LearnLoop{% endblock %}
 {% block content %}
-<h1>{{ topic.name }}</h1>
-<ul>
-  <li><a href="{% url 'quiz' topic.pk %}">Personalize this topic (quick quiz)</a></li>
-  <li><a href="{% url 'plan' topic.pk %}">My learning plan</a></li>
-</ul>
-<p><a href="{% url 'dashboard' %}">Back to dashboard</a></p>
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="{% url 'dashboard' %}">Dashboard</a>
+  <span aria-hidden="true">/</span>
+  <span>{{ topic.name }}</span>
+</nav>
+
+<section class="topic-hero">
+  <div class="topic-hero__content">
+    <p class="eyebrow">Topic</p>
+    <h1>{{ topic.name }}</h1>
+    <p class="lede">A focused path through {{ topic.name }}, shaped by your level, your goal and the time you actually have.</p>
+    <div class="button-row">
+      <a class="button button--primary" href="{% url 'quiz' topic.pk %}">Personalize this topic</a>
+      <a class="button button--ghost" href="{% url 'plan' topic.pk %}">My learning plan</a>
+    </div>
+  </div>
+
+  <div class="topic-hero__visual">
+    <figure class="topic-quote">
+      <blockquote>“Learning is not attained by chance. It must be sought with ardor and attended with diligence.”</blockquote>
+      <figcaption>Abigail Adams</figcaption>
+    </figure>
+  </div>
+</section>
+
+<div class="action-grid">
+  <a class="action-card" href="{% url 'quiz' topic.pk %}">
+    <span class="action-card__icon" aria-hidden="true">✎</span>
+    <h2>Start with a quick quiz</h2>
+    <p>Share your level, goal, pace and preferred format. It takes about a minute and makes the plan yours.</p>
+    <span class="action-card__cta">Take the quiz <span aria-hidden="true">→</span></span>
+  </a>
+
+  <a class="action-card" href="{% url 'plan' topic.pk %}">
+    <span class="action-card__icon" aria-hidden="true">☰</span>
+    <h2>Open your learning plan</h2>
+    <p>See your current steps and resources. Rebuild any time your answers or interests change.</p>
+    <span class="action-card__cta">View my plan <span aria-hidden="true">→</span></span>
+  </a>
+</div>
+
+<div class="topic-notes">
+  <section class="note-card">
+    <p class="eyebrow">What you get</p>
+    <h2>A plan built around you</h2>
+    <ul class="check-list">
+      <li>A step-by-step path sized to your week</li>
+      <li>Videos, books, articles and practice links</li>
+      <li>Feedback that reshapes the next rebuild</li>
+      <li>Your choices stay private to your account</li>
+    </ul>
+  </section>
+
+  <section class="note-card">
+    <p class="eyebrow">A note on pace</p>
+    <h2>Depth over noise</h2>
+    <p class="muted">LearnLoop favours a small number of serious resources over an endless feed. Work through one step at a time, mark what helps, and skip what does not. The plan adapts as you do.</p>
+    <p><a href="{% url 'dashboard' %}">Back to dashboard</a></p>
+  </section>
+</div>
 {% endblock %}
