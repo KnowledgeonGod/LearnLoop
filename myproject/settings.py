@@ -17,7 +17,7 @@ load_dotenv(BASE_DIR / ".env")
 
 # Secrets management: from the environment, never hardcoded
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
-DEBUG = os.environ.get("DJANGO_DEBUG") == "1"
+DEBUG = os.environ.get("DJANGO_DEBUG", "False") == True
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h]
 
 
@@ -241,8 +241,8 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
 # Production security. These can be overridden for a local HTTPS test.
 CSRF_TRUSTED_ORIGINS = [
