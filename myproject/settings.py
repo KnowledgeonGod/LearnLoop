@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -64,10 +65,26 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 #
-# SQLite is the zero-configuration default. Set DB_ENGINE=postgres for production
-# (and install the driver: pip install "psycopg[binary]").
+# DATABASE_URL takes precedence so hosted Postgres providers (Neon, Supabase,
+# Railway, ...) only need one secret. Without it, DB_ENGINE=postgres uses the
+# individual DB_* settings; otherwise SQLite is the zero-configuration default.
 DB_ENGINE = os.environ.get("DB_ENGINE", "sqlite").strip().lower()
-if DB_ENGINE in {"postgres", "postgresql"}:
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+DB_CONN_MAX_AGE = int(os.environ.get("DB_CONN_MAX_AGE", "60"))
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=DB_CONN_MAX_AGE,
+            conn_health_checks=True,
+        )
+    }
+    # PgBouncer-style poolers (including Neon's -pooler hosts) do not support
+    # server-side cursors in transaction pooling mode.
+    if "-pooler." in (DATABASES["default"].get("HOST") or ""):
+        DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+elif DB_ENGINE in {"postgres", "postgresql"}:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -76,7 +93,7 @@ if DB_ENGINE in {"postgres", "postgresql"}:
             "PASSWORD": os.environ.get("DB_PASSWORD", ""),
             "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
             "PORT": os.environ.get("DB_PORT", "5432"),
-            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+            "CONN_MAX_AGE": DB_CONN_MAX_AGE,
         }
     }
 else:
