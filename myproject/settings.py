@@ -33,12 +33,14 @@ INSTALLED_APPS = [
     "axes",
     "rest_framework",
     "drf_spectacular",
+    "rest_framework.authtoken",
     "apps.accounts",
     "apps.topics",
     "apps.quiz",
     "apps.learning",
     "apps.resources",
     "apps.feedback",
+    "apps.api",
 
 ]
 
@@ -58,14 +60,35 @@ ROOT_URLCONF = 'myproject.urls'
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
     ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        "signup": "10/hour",
+        "login": "30/hour",
+        "search": "30/minute",
+        "quiz": "20/minute",
+        "plan_generate": "10/hour",
+        "feedback": "60/minute",
+    },
 }
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "LearnLoop API",
-    "DESCRIPTION": "API for LearnLoop: search topics, quizzes, learning plans, resources and feedback.",
+    "DESCRIPTION": (
+        "API for LearnLoop: search a topic, take the quiz, get a personalised learning plan "
+        "with resources, and give feedback.\n\n"
+        "**Getting started**\n"
+        "1. `POST /api/auth/signup/` (or `/api/auth/login/`) returns a `token`.\n"
+        "2. Send it on every other request as the header `Authorization: Token <token>`. "
+        "In this page, click **Authorize** and enter `Token <token>`.\n"
+        "3. `POST /api/topics/search/` gives a topic `id`.\n"
+        "4. `PUT /api/topics/{id}/quiz/` submits the quiz.\n"
+        "5. `POST /api/topics/{id}/plan/generate/` builds the plan, then `GET /api/topics/{id}/plan/` reads it.\n"
+        "6. `POST /api/resources/{id}/feedback/` records likes, dislikes, done and skip."
+    ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "SERVERS": [
@@ -227,6 +250,11 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
+# Tests should not depend on a collectstatic manifest.
+if "test" in sys.argv:
+    STORAGES["staticfiles"] = {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+    }
 
 # Logging: one console handler, no secrets. Set DJANGO_LOG_LEVEL=DEBUG for more detail.
 LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()

@@ -2,10 +2,1004 @@ openapi: 3.0.3
 info:
   title: LearnLoop API
   version: 1.0.0
-  description: 'API for LearnLoop: search topics, quizzes, learning plans, resources
-    and feedback.'
-paths: {}
-components: {}
+  description: |-
+    API for LearnLoop: search a topic, take the quiz, get a personalised learning plan with resources, and give feedback.
+
+    **Getting started**
+    1. `POST /api/auth/signup/` (or `/api/auth/login/`) returns a `token`.
+    2. Send it on every other request as the header `Authorization: Token <token>`. In this page, click **Authorize** and enter `Token <token>`.
+    3. `POST /api/topics/search/` gives a topic `id`.
+    4. `PUT /api/topics/{id}/quiz/` submits the quiz.
+    5. `POST /api/topics/{id}/plan/generate/` builds the plan, then `GET /api/topics/{id}/plan/` reads it.
+    6. `POST /api/resources/{id}/feedback/` records likes, dislikes, done and skip.
+paths:
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: Returns a token. Five failed attempts lock the account for one
+        hour.
+      summary: Log in
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+          description: ''
+        '400':
+          description: 'Validation errors, e.g. {"email": ["Enter a valid email address."]}'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      description: Deletes the user's token. Log in again to get a new one.
+      summary: Log out
+      tags:
+      - auth
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: Logged out
+  /api/auth/signup/:
+    post:
+      operationId: auth_signup_create
+      description: 'Creates an account and returns a token. Send the token on every
+        later request as the header `Authorization: Token <token>`.'
+      summary: Create an account
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Signup'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Signup'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Signup'
+        required: true
+      security:
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+          description: ''
+        '400':
+          description: 'Validation errors, e.g. {"email": ["Enter a valid email address."]}'
+  /api/dashboard/:
+    get:
+      operationId: dashboard_retrieve
+      description: The user's most recent searches, and topics that at least two different
+        users have searched.
+      summary: Dashboard
+      tags:
+      - topics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: ''
+  /api/profile/:
+    get:
+      operationId: profile_retrieve
+      summary: Get my profile
+      tags:
+      - profile
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: profile_partial_update
+      summary: Change my preferred learning format
+      tags:
+      - profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProfileUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProfileUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProfileUpdate'
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+        '400':
+          description: 'Validation errors, e.g. {"email": ["Enter a valid email address."]}'
+  /api/resources/{resource_id}/feedback/:
+    post:
+      operationId: resources_feedback_create
+      description: 'Actions: `like`, `dislike`, `clear_rating`, `done`, `skip`, `clear_progress`.
+        Feedback is private to the user and changes what their next plan rebuild shows.'
+      summary: Give feedback on a resource
+      parameters:
+      - in: path
+        name: resource_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - feedback
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackAction'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FeedbackAction'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FeedbackAction'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResult'
+          description: ''
+        '400':
+          description: 'Validation errors, e.g. {"email": ["Enter a valid email address."]}'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/topics/{topic_id}/:
+    get:
+      operationId: topics_retrieve
+      description: '`plan_state` tells the app what to show next: take the quiz, generate
+        a plan, or show the plan.'
+      summary: Get a topic
+      parameters:
+      - in: path
+        name: topic_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - topics
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicDetail'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/topics/{topic_id}/plan/:
+    get:
+      operationId: topics_plan_retrieve
+      description: Steps with their resources, in order. Resources the user disliked
+        or skipped are listed separately in `hidden_resources` so the action can be
+        undone.
+      summary: Get my learning plan for a topic
+      parameters:
+      - in: path
+        name: topic_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - plan
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/topics/{topic_id}/plan/generate/:
+    post:
+      operationId: topics_plan_generate_create
+      description: 'The quiz must be submitted first. If background jobs are on, this
+        returns **202** with a job: poll the job endpoint until `plan_ready` is true,
+        then fetch the plan. Otherwise the plan is built during the request (it can
+        take a while) and returned with **201**.'
+      summary: Generate or rebuild my learning plan
+      parameters:
+      - in: path
+        name: topic_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - plan
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+          description: ''
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanJob'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'Quiz not taken yet (code: quiz_required)'
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Daily plan limit reached
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Plan backend failed or is not configured
+  /api/topics/{topic_id}/plan/jobs/{job_id}/:
+    get:
+      operationId: topics_plan_jobs_retrieve
+      description: Poll every couple of seconds. Stop when `status` is `succeeded`
+        or `failed`.
+      summary: Check a plan generation job
+      parameters:
+      - in: path
+        name: job_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: topic_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - plan
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanJob'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/topics/{topic_id}/quiz/:
+    get:
+      operationId: topics_quiz_retrieve
+      description: 'Returns the saved answers, or defaults with `completed: false`
+        if the quiz was not taken yet.'
+      summary: Get my quiz answers for a topic
+      parameters:
+      - in: path
+        name: topic_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - quiz
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizState'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+    put:
+      operationId: topics_quiz_update
+      description: Send all six answers. Submitting again replaces the earlier answers;
+        an existing plan then becomes `stale` until it is regenerated.
+      summary: Submit my quiz answers for a topic
+      parameters:
+      - in: path
+        name: topic_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - quiz
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuizAnswers'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuizAnswers'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuizAnswers'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizState'
+          description: ''
+        '400':
+          description: 'Validation errors, e.g. {"email": ["Enter a valid email address."]}'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/topics/search/:
+    post:
+      operationId: topics_search_create
+      description: Finds or creates the topic and adds it to the user's history. Use
+        the returned `id` for the quiz and plan endpoints.
+      summary: Search a topic
+      tags:
+      - topics
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSearch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TopicSearch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TopicSearch'
+        required: true
+      security:
+      - tokenAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+          description: ''
+        '400':
+          description: 'Validation errors, e.g. {"email": ["Enter a valid email address."]}'
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - like
+      - dislike
+      - clear_rating
+      - done
+      - skip
+      - clear_progress
+      type: string
+      description: |-
+        * `like` - like
+        * `dislike` - dislike
+        * `clear_rating` - clear_rating
+        * `done` - done
+        * `skip` - skip
+        * `clear_progress` - clear_progress
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: 'Send as the header `Authorization: Token <token>`.'
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+      - token
+      - user
+    Dashboard:
+      type: object
+      properties:
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentTopic'
+        popular:
+          type: array
+          items:
+            $ref: '#/components/schemas/Topic'
+      required:
+      - popular
+      - recent
+    DepthEnum:
+      enum:
+      - overview
+      - deep
+      type: string
+      description: |-
+        * `overview` - Quick overview
+        * `deep` - Deep mastery
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+        code:
+          type: string
+      required:
+      - detail
+    FeedbackAction:
+      type: object
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+      required:
+      - action
+    FeedbackResult:
+      type: object
+      properties:
+        resource_id:
+          type: integer
+        topic_id:
+          type: integer
+        rating:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/RatingEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        progress:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ProgressEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - progress
+      - rating
+      - resource_id
+      - topic_id
+    FeedbackState:
+      type: object
+      properties:
+        rating:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/RatingEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        progress:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ProgressEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - progress
+      - rating
+    GoalEnum:
+      enum:
+      - exam
+      - job
+      - build
+      - curiosity
+      type: string
+      description: |-
+        * `exam` - Pass an exam
+        * `job` - Get a job
+        * `build` - Build something
+        * `curiosity` - Curiosity
+    HiddenResource:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        feedback:
+          $ref: '#/components/schemas/FeedbackState'
+      required:
+      - feedback
+      - id
+      - kind
+      - title
+      - url
+    KindEnum:
+      enum:
+      - video
+      - book
+      - article
+      - exercise
+      type: string
+      description: |-
+        * `video` - Video
+        * `book` - Book
+        * `article` - Article
+        * `exercise` - Exercise
+    LevelEnum:
+      enum:
+      - beginner
+      - some
+      - intermediate
+      type: string
+      description: |-
+        * `beginner` - I'm new to this
+        * `some` - I know the basics
+        * `intermediate` - I've used it before
+    Login:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+    NullEnum:
+      enum:
+      - null
+    PatchedProfileUpdate:
+      type: object
+      properties:
+        preferred_format:
+          $ref: '#/components/schemas/PreferredFormatEnum'
+    Plan:
+      type: object
+      properties:
+        state:
+          $ref: '#/components/schemas/StateEnum'
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanStep'
+        hidden_resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/HiddenResource'
+          description: Resources the user disliked or skipped. They can be undone.
+        quota_remaining:
+          type: integer
+          nullable: true
+          description: Plan builds left today, or null when unlimited.
+        active_job:
+          allOf:
+          - $ref: '#/components/schemas/PlanJob'
+          nullable: true
+      required:
+      - active_job
+      - generated_at
+      - hidden_resources
+      - quota_remaining
+      - source
+      - state
+      - steps
+    PlanJob:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        status_display:
+          type: string
+        error:
+          type: string
+        plan_ready:
+          type: boolean
+          description: True once the plan can be fetched from the plan endpoint.
+        worker_may_be_stopped:
+          type: boolean
+      required:
+      - error
+      - id
+      - plan_ready
+      - status
+      - status_display
+      - worker_may_be_stopped
+    PlanResource:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        source:
+          type: string
+          description: Where it came from, e.g. youtube or wikipedia.
+        why_this_one:
+          type: array
+          items:
+            type: string
+        feedback:
+          allOf:
+          - $ref: '#/components/schemas/FeedbackState'
+          nullable: true
+          description: This user's own feedback, or null.
+      required:
+      - feedback
+      - id
+      - kind
+      - source
+      - title
+      - url
+      - why_this_one
+    PlanStateEnum:
+      enum:
+      - needs_quiz
+      - no_plan
+      - stale
+      - ready
+      type: string
+      description: |-
+        * `needs_quiz` - The quiz has not been taken for this topic yet
+        * `no_plan` - Quiz taken, no plan generated yet
+        * `stale` - A plan exists but the quiz answers changed since it was built
+        * `ready` - The plan is up to date
+    PlanStep:
+      type: object
+      properties:
+        id:
+          type: integer
+        position:
+          type: integer
+        title:
+          type: string
+        explanation:
+          type: string
+        minutes:
+          type: integer
+        step_type:
+          $ref: '#/components/schemas/StepTypeEnum'
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanResource'
+      required:
+      - explanation
+      - id
+      - minutes
+      - position
+      - resources
+      - step_type
+      - title
+    PreferredFormatEnum:
+      enum:
+      - video
+      - reading
+      - practice
+      - mix
+      type: string
+      description: |-
+        * `video` - Video
+        * `reading` - Reading
+        * `practice` - Hands-on practice
+        * `mix` - Mix of everything
+    ProgressEnum:
+      enum:
+      - done
+      - skipped
+      type: string
+      description: |-
+        * `done` - Done
+        * `skipped` - Skipped
+    QuizAnswers:
+      type: object
+      properties:
+        level:
+          $ref: '#/components/schemas/LevelEnum'
+        goal:
+          $ref: '#/components/schemas/GoalEnum'
+        hours_per_week:
+          type: integer
+          maximum: 40
+          minimum: 1
+        weeks_available:
+          type: integer
+          maximum: 52
+          minimum: 1
+        preferred_format:
+          $ref: '#/components/schemas/PreferredFormatEnum'
+        depth:
+          $ref: '#/components/schemas/DepthEnum'
+      required:
+      - depth
+      - goal
+      - hours_per_week
+      - level
+      - preferred_format
+      - weeks_available
+    QuizState:
+      type: object
+      properties:
+        level:
+          $ref: '#/components/schemas/LevelEnum'
+        goal:
+          $ref: '#/components/schemas/GoalEnum'
+        hours_per_week:
+          type: integer
+          maximum: 40
+          minimum: 1
+        weeks_available:
+          type: integer
+          maximum: 52
+          minimum: 1
+        preferred_format:
+          $ref: '#/components/schemas/PreferredFormatEnum'
+        depth:
+          $ref: '#/components/schemas/DepthEnum'
+        completed:
+          type: boolean
+          readOnly: true
+          description: False when the user has not submitted this quiz yet; the other
+            fields are then defaults.
+      required:
+      - completed
+      - depth
+      - goal
+      - hours_per_week
+      - level
+      - preferred_format
+      - weeks_available
+    RatingEnum:
+      enum:
+      - like
+      - dislike
+      type: string
+      description: |-
+        * `like` - Like
+        * `dislike` - Dislike
+    RecentTopic:
+      type: object
+      properties:
+        topic:
+          $ref: '#/components/schemas/Topic'
+        last_searched_at:
+          type: string
+          format: date-time
+      required:
+      - last_searched_at
+      - topic
+    Signup:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - name
+      - password
+    StateEnum:
+      enum:
+      - needs_quiz
+      - no_plan
+      - stale
+      - ready
+      type: string
+      description: |-
+        * `needs_quiz` - The quiz has not been taken for this topic yet
+        * `no_plan` - Quiz taken, no plan generated yet
+        * `stale` - A plan exists but the quiz answers changed since it was built
+        * `ready` - The plan is up to date
+    StatusEnum:
+      enum:
+      - queued
+      - running
+      - succeeded
+      - failed
+      type: string
+      description: |-
+        * `queued` - Queued
+        * `running` - Running
+        * `succeeded` - Succeeded
+        * `failed` - Failed
+    StepTypeEnum:
+      enum:
+      - read
+      - watch
+      - practice
+      type: string
+      description: |-
+        * `read` - Read
+        * `watch` - Watch
+        * `practice` - Practice
+    Topic:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+    TopicDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        plan_state:
+          allOf:
+          - $ref: '#/components/schemas/PlanStateEnum'
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - plan_state
+    TopicSearch:
+      type: object
+      properties:
+        query:
+          type: string
+          description: What the user wants to learn, e.g. 'python decorators'. 2 to
+            100 characters.
+          maxLength: 100
+      required:
+      - query
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+        preferred_format:
+          allOf:
+          - $ref: '#/components/schemas/PreferredFormatEnum'
+          readOnly: true
+      required:
+      - date_joined
+      - email
+      - id
+      - name
+      - preferred_format
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"
 servers:
 - url: https://learnloop-n455.onrender.com
   description: Production (Render)
