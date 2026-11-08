@@ -1,0 +1,13 @@
+openapi: 3.0.3
+info:
+  title: LearnLoop API
+  version: 1.0.0
+  description: 'API for LearnLoop: search topics, quizzes, learning plans, resources
+    and feedback.'
+paths: {}
+components: {}
+servers:
+- url: https://learnloop-n455.onrender.com
+  description: Production (Render)
+- url: http://127.0.0.1:8000
+  description: Local

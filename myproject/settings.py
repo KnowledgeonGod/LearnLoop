@@ -31,6 +31,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "axes",
+    "rest_framework",
+    "drf_spectacular",
     "apps.accounts",
     "apps.topics",
     "apps.quiz",
@@ -52,6 +54,25 @@ MIDDLEWARE = [
     "axes.middleware.AxesMiddleware",  # keep last
 ]
 ROOT_URLCONF = 'myproject.urls'
+
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
+    ],
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "LearnLoop API",
+    "DESCRIPTION": "API for LearnLoop: search topics, quizzes, learning plans, resources and feedback.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SERVERS": [
+        {"url": "https://learnloop-n455.onrender.com", "description": "Production (Render)"},
+        {"url": "http://127.0.0.1:8000", "description": "Local"},
+    ],
+}
 
 TEMPLATES = [
     {
